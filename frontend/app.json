@@ -1,0 +1,19 @@
+{
+  "expo": {
+    "name": "FoodTruck Platform",
+    "slug": "foodtruck-platform",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "resizeMode": "contain",
+      "backgroundColor": "#0B1020"
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "plugins": [
+      "@react-native-community/datetimepicker"
+    ]
+  }
+}
