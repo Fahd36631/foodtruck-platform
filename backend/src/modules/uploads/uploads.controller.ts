@@ -1,44 +1,43 @@
-import fs from "fs";
-import path from "path";
 import type { Request, Response } from "express";
 import multer from "multer";
 import { StatusCodes } from "http-status-codes";
 
+import { cloudinary } from "../../config/cloudinary";
 import { AppError } from "../../core/errors";
 import { ok } from "../../core/http/api-response";
 
-const uploadsDir = path.resolve(process.cwd(), "uploads");
-if (!fs.existsSync(uploadsDir)) {
-  fs.mkdirSync(uploadsDir, { recursive: true });
-}
-
-const storage = multer.diskStorage({
-  destination: (_req, _file, cb) => {
-    cb(null, uploadsDir);
-  },
-  filename: (_req, file, cb) => {
-    const extension = path.extname(file.originalname || "") || ".bin";
-    const baseName = path
-      .basename(file.originalname || "upload", extension)
-      .toLowerCase()
-      .replace(/[^a-z0-9-_]/g, "-")
-      .slice(0, 40);
-    cb(null, `${Date.now()}-${baseName}${extension}`);
-  }
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 }
 });
 
-export const uploadSingleMiddleware = multer({ storage }).single("file");
+export const uploadSingleMiddleware = upload.single("file");
 
-export const uploadSingle = (req: Request, res: Response) => {
+export const uploadSingle = async (req: Request, res: Response) => {
   if (!req.file) {
     throw new AppError("UPLOAD_FILE_MISSING");
   }
+  const file = req.file;
 
-  const host = req.get("host");
-  const protocol = req.protocol;
-  const fileUrl = `${protocol}://${host}/uploads/${req.file.filename}`;
+  const uploaded = await new Promise<{ secure_url: string; public_id: string }>((resolve, reject) => {
+    const stream = cloudinary.uploader.upload_stream(
+      {
+        folder: "foodtruck-platform"
+      },
+      (error, result) => {
+        if (error || !result) {
+          reject(new AppError("INTERNAL_ERROR", { message: "Cloudinary upload failed", details: error }));
+          return;
+        }
+
+        resolve({ secure_url: result.secure_url, public_id: result.public_id });
+      }
+    );
+
+    stream.end(file.buffer);
+  });
 
   res
     .status(StatusCodes.CREATED)
-    .json(ok("File uploaded", { url: fileUrl, fileName: req.file.originalname }));
+    .json(ok("File uploaded", { url: uploaded.secure_url, public_id: uploaded.public_id }));
 };

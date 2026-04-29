@@ -1,4 +1,3 @@
-import path from "path";
 import cors from "cors";
 import express from "express";
 import rateLimit from "express-rate-limit";
@@ -12,11 +11,42 @@ import { logger } from "./core/logger/logger";
 import { apiRouter } from "./routes";
 
 const app = express();
+const additionalCorsOrigins = (env.CORS_ORIGIN ?? "")
+  .split(",")
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+
+const localhostPattern = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/;
+const lanPattern = /^https?:\/\/((10\.\d{1,3}\.\d{1,3}\.\d{1,3})|(192\.168\.\d{1,3}\.\d{1,3})|(172\.(1[6-9]|2\d|3[0-1])\.\d{1,3}\.\d{1,3}))(:\d+)?$/;
+
+const isAllowedOrigin = (origin: string): boolean => {
+  if (additionalCorsOrigins.includes(origin)) {
+    return true;
+  }
+
+  return localhostPattern.test(origin) || lanPattern.test(origin);
+};
 
 // Observability + security middlewares.
 app.use(pinoHttp({ logger }));
 app.use(helmet());
-app.use(cors({ origin: env.CORS_ORIGIN === "*" ? true : env.CORS_ORIGIN }));
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      if (!origin) {
+        callback(null, true);
+        return;
+      }
+
+      if (isAllowedOrigin(origin)) {
+        callback(null, true);
+        return;
+      }
+
+      callback(new Error("CORS origin is not allowed"));
+    }
+  })
+);
 app.use(
   rateLimit({
     windowMs: 15 * 60 * 1000,
@@ -24,9 +54,6 @@ app.use(
   })
 );
 app.use(express.json());
-
-// Static: user-uploaded files.
-app.use("/uploads", express.static(path.resolve(process.cwd(), "uploads")));
 
 // API surface.
 app.use("/api/v1", apiRouter);
