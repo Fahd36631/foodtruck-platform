@@ -1,5 +1,6 @@
 import { Router } from "express";
 
+import { asyncHandler } from "../../core/http/async-handler";
 import { authenticate } from "../../core/http/middleware/authenticate";
 import { authorize } from "../../core/http/middleware/authorize";
 import { ROLE_CODES } from "../shared/roles";
@@ -12,7 +13,7 @@ uploadsRouter.post(
   authenticate,
   authorize(ROLE_CODES.TRUCK_OWNER, ROLE_CODES.ADMIN),
   uploadSingleMiddleware,
-  uploadSingle
+  asyncHandler(uploadSingle)
 );
 
 export { uploadsRouter };
