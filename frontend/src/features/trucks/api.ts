@@ -9,6 +9,7 @@ const authHeaders = (accessToken?: string) =>
 export const getDiscoveryTrucks = async (filters: DiscoveryFilters, accessToken?: string) => {
   const response = await apiClient.get<ApiEnvelope<{ items: TruckDiscoveryItem[] }>>("/trucks/discovery", {
     params: {
+      _t: Date.now(),
       city: filters.city,
       neighborhood: filters.neighborhood,
       categoryId: filters.categoryId
