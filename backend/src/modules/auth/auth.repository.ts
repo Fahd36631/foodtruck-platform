@@ -6,6 +6,7 @@ type CreateUserInput = {
   email: string;
   phone: string;
   passwordHash: string;
+  isVerified?: number;
 };
 
 type UpdateProfileInput = {
@@ -18,7 +19,16 @@ type UpdateProfileInput = {
 const findUserByEmail = async (email: string) => {
   return db("users as u")
     .join("roles as r", "r.id", "u.role_id")
-    .select("u.id", "u.full_name", "u.email", "u.phone", "u.password_hash", "u.role_id", "r.code as role_code")
+    .select(
+      "u.id",
+      "u.full_name",
+      "u.email",
+      "u.phone",
+      "u.password_hash",
+      "u.role_id",
+      "u.is_verified",
+      "r.code as role_code"
+    )
     .where("u.email", email)
     .whereNull("u.deleted_at")
     .first();
@@ -52,10 +62,21 @@ const createUser = async (payload: CreateUserInput): Promise<number> => {
     full_name: payload.fullName,
     email: payload.email,
     phone: payload.phone,
-    password_hash: payload.passwordHash
+    password_hash: payload.passwordHash,
+    is_verified: payload.isVerified ?? 0
   });
 
   return Number(createdId);
+};
+
+const markEmailVerified = async (email: string): Promise<void> => {
+  await db("users")
+    .where({ email })
+    .whereNull("deleted_at")
+    .update({
+      is_verified: 1,
+      email_verified_at: db.fn.now()
+    });
 };
 
 const updateProfile = async (payload: UpdateProfileInput): Promise<void> => {
@@ -82,6 +103,7 @@ export const authRepository = {
   findUserByPhone,
   findRoleByCode,
   createUser,
+  markEmailVerified,
   updateProfile,
   updatePasswordHash
 };

@@ -17,7 +17,9 @@ const envSchema = z.object({
   CORS_ORIGIN: z.string().optional(),
   CLOUDINARY_CLOUD_NAME: z.string().min(1),
   CLOUDINARY_API_KEY: z.string().min(1),
-  CLOUDINARY_API_SECRET: z.string().min(1)
+  CLOUDINARY_API_SECRET: z.string().min(1),
+  RESEND_API_KEY: z.string().min(1),
+  RESEND_FROM_EMAIL: z.string().email().default("onboarding@resend.dev")
 });
 
 export const env = envSchema.parse(process.env);
