@@ -321,8 +321,10 @@ const listOwnerNotifications = async (ownerUserId: number, limit = 20) => {
     .limit(limit);
 };
 
-const listPendingTrucks = async () => {
-  return db("food_trucks as ft")
+export type AdminTruckListFilter = "pending" | "approved" | "rejected" | "today";
+
+const adminTruckListBaseQuery = () =>
+  db("food_trucks as ft")
     .leftJoin("users as u", "u.id", "ft.owner_user_id")
     .leftJoin("truck_locations as tl", function joinCurrentLocation() {
       this.on("tl.truck_id", "=", "ft.id").andOn("tl.is_current", "=", db.raw("1"));
@@ -358,9 +360,24 @@ const listPendingTrucks = async () => {
       "ml.expires_at",
       "ml.review_status"
     )
-    .where("ft.approval_status", "pending")
-    .whereNull("ft.deleted_at")
-    .orderBy("ft.created_at", "desc");
+    .whereNull("ft.deleted_at");
+
+const listPendingTrucks = async () => {
+  return adminTruckListBaseQuery().where("ft.approval_status", "pending").orderBy("ft.created_at", "desc");
+};
+
+const listAdminTrucks = async (filter: AdminTruckListFilter) => {
+  const query = adminTruckListBaseQuery();
+  if (filter === "pending") {
+    query.where("ft.approval_status", "pending");
+  } else if (filter === "approved") {
+    query.where("ft.approval_status", "approved");
+  } else if (filter === "rejected") {
+    query.where("ft.approval_status", "rejected");
+  } else {
+    query.whereRaw("DATE(ft.created_at) = CURDATE()");
+  }
+  return query.orderBy("ft.created_at", "desc");
 };
 
 const getAdminDashboardStats = async (): Promise<AdminDashboardStats> => {
@@ -488,6 +505,7 @@ export const trucksRepository = {
   reviewTruckLicense,
   listOwnerNotifications,
   listPendingTrucks,
+  listAdminTrucks,
   getAdminDashboardStats,
   listDiscoveryTrucks,
   getTruckDetailsForCustomer,

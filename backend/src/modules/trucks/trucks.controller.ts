@@ -6,6 +6,7 @@ import { requireAuth } from "../../core/http/require-auth";
 import { trucksService } from "./trucks.service";
 import {
   decisionTruckApprovalSchema,
+  adminTrucksQuerySchema,
   discoveryQuerySchema,
   registerTruckSchema,
   updateTruckLocationSchema,
@@ -64,6 +65,13 @@ const adminStats = async (req: Request, res: Response) => {
   res.status(StatusCodes.OK).json(ok("Admin dashboard stats fetched", result));
 };
 
+const listAdminTrucks = async (req: Request, res: Response) => {
+  const authUser = requireAuth(req);
+  const { filter } = adminTrucksQuerySchema.parse(req.query);
+  const result = await trucksService.listAdminTrucks(authUser, filter);
+  res.status(StatusCodes.OK).json(ok("Admin trucks fetched", result));
+};
+
 const discover = async (req: Request, res: Response) => {
   const filters = discoveryQuerySchema.parse(req.query);
   const result = await trucksService.discover(filters);
@@ -108,6 +116,7 @@ export const trucksController = {
   updateStatus,
   reviewTruckApproval,
   listPending,
+  listAdminTrucks,
   adminStats,
   discover,
   details,
