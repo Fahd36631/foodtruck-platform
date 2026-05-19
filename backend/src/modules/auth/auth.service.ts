@@ -6,16 +6,24 @@ import { env } from "../../config/env";
 import { AppError } from "../../core/errors";
 import { ROLE_CODES } from "../shared/roles";
 import { authRepository } from "./auth.repository";
+import { emailVerificationService } from "./email-verification.service";
 import type {
   ChangePasswordInput,
   CreateAdminInput,
   LoginInput,
   RegisterInput,
-  UpdateProfileInput
+  ResendCodeInput,
+  UpdateProfileInput,
+  VerifyEmailInput
 } from "./auth.validator";
 
+const normalizeEmail = (email: string) => email.trim().toLowerCase();
+
+const isUserEmailVerified = (isVerified: unknown) => Number(isVerified) === 1;
+
 const register = async (payload: RegisterInput) => {
-  const existingByEmail = await authRepository.findUserByEmail(payload.email);
+  const normalizedEmail = normalizeEmail(payload.email);
+  const existingByEmail = await authRepository.findUserByEmail(normalizedEmail);
   if (existingByEmail) {
     throw new AppError("AUTH_EMAIL_TAKEN");
   }
@@ -35,17 +43,21 @@ const register = async (payload: RegisterInput) => {
 
   const userId = await authRepository.createUser({
     roleId: selectedRole.id,
-    fullName: payload.fullName,
-    email: payload.email,
-    phone: payload.phone,
-    passwordHash
+    fullName: payload.fullName.trim(),
+    email: normalizedEmail,
+    phone: payload.phone.trim(),
+    passwordHash,
+    isVerified: 0
   });
+
+  await emailVerificationService.issueAndSendCode(normalizedEmail);
 
   return { userId };
 };
 
 const login = async (payload: LoginInput) => {
-  const user = await authRepository.findUserByEmail(payload.email);
+  const normalizedEmail = normalizeEmail(payload.email);
+  const user = await authRepository.findUserByEmail(normalizedEmail);
   if (!user) {
     throw new AppError("AUTH_INVALID_CREDENTIALS");
   }
@@ -53,6 +65,12 @@ const login = async (payload: LoginInput) => {
   const isValid = await bcrypt.compare(payload.password, user.password_hash);
   if (!isValid) {
     throw new AppError("AUTH_INVALID_CREDENTIALS");
+  }
+
+  if (!isUserEmailVerified(user.is_verified)) {
+    throw new AppError("AUTH_EMAIL_NOT_VERIFIED", {
+      message: "Please verify your email first"
+    });
   }
 
   const accessToken = jwt.sign(
@@ -166,10 +184,19 @@ const createAdmin = async (payload: CreateAdminInput) => {
     fullName: payload.fullName.trim(),
     email: normalizedEmail,
     phone: normalizedPhone,
-    passwordHash
+    passwordHash,
+    isVerified: 1
   });
 
   return { userId };
+};
+
+const verifyEmail = async (payload: VerifyEmailInput) => {
+  return emailVerificationService.verifyEmail(payload);
+};
+
+const resendCode = async (payload: ResendCodeInput) => {
+  return emailVerificationService.resendCode(payload);
 };
 
 export const authService = {
@@ -178,5 +205,7 @@ export const authService = {
   getMe,
   updateMe,
   changeMyPassword,
-  createAdmin
+  createAdmin,
+  verifyEmail,
+  resendCode
 };

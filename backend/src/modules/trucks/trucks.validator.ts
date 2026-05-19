@@ -65,3 +65,7 @@ export const discoveryQuerySchema = z.object({
   neighborhood: z.string().min(2).max(120).optional(),
   categoryId: z.coerce.number().int().positive().optional()
 });
+
+export const adminTrucksQuerySchema = z.object({
+  filter: z.enum(["pending", "approved", "rejected", "today"])
+});

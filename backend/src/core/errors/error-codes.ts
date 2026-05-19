@@ -28,6 +28,12 @@ export const ERROR_CODES = {
   AUTH_USER_NOT_FOUND: "AUTH_USER_NOT_FOUND",
   AUTH_CURRENT_PASSWORD_INVALID: "AUTH_CURRENT_PASSWORD_INVALID",
   AUTH_ROLE_NOT_CONFIGURED: "AUTH_ROLE_NOT_CONFIGURED",
+  AUTH_EMAIL_NOT_VERIFIED: "AUTH_EMAIL_NOT_VERIFIED",
+  AUTH_EMAIL_ALREADY_VERIFIED: "AUTH_EMAIL_ALREADY_VERIFIED",
+  AUTH_EMAIL_SEND_FAILED: "AUTH_EMAIL_SEND_FAILED",
+  AUTH_VERIFICATION_CODE_INVALID: "AUTH_VERIFICATION_CODE_INVALID",
+  AUTH_VERIFICATION_CODE_EXPIRED: "AUTH_VERIFICATION_CODE_EXPIRED",
+  AUTH_VERIFICATION_TOO_MANY_ATTEMPTS: "AUTH_VERIFICATION_TOO_MANY_ATTEMPTS",
 
   // -------- Trucks --------
   TRUCK_NOT_FOUND: "TRUCK_NOT_FOUND",
@@ -87,6 +93,21 @@ export const ERROR_CATALOG: Record<ErrorCode, ErrorDefinition> = {
   AUTH_USER_NOT_FOUND: { status: StatusCodes.NOT_FOUND, message: "User not found" },
   AUTH_CURRENT_PASSWORD_INVALID: { status: StatusCodes.UNAUTHORIZED, message: "Current password is incorrect" },
   AUTH_ROLE_NOT_CONFIGURED: { status: StatusCodes.INTERNAL_SERVER_ERROR, message: "Selected role is not configured" },
+  AUTH_EMAIL_NOT_VERIFIED: {
+    status: StatusCodes.FORBIDDEN,
+    message: "Please verify your email first"
+  },
+  AUTH_EMAIL_ALREADY_VERIFIED: { status: StatusCodes.CONFLICT, message: "Email is already verified" },
+  AUTH_EMAIL_SEND_FAILED: {
+    status: StatusCodes.BAD_GATEWAY,
+    message: "Failed to send verification email. Please try again later."
+  },
+  AUTH_VERIFICATION_CODE_INVALID: { status: StatusCodes.BAD_REQUEST, message: "Invalid verification code" },
+  AUTH_VERIFICATION_CODE_EXPIRED: { status: StatusCodes.BAD_REQUEST, message: "Verification code has expired" },
+  AUTH_VERIFICATION_TOO_MANY_ATTEMPTS: {
+    status: StatusCodes.TOO_MANY_REQUESTS,
+    message: "Too many invalid attempts. Please request a new code."
+  },
 
   // Trucks
   TRUCK_NOT_FOUND: { status: StatusCodes.NOT_FOUND, message: "Truck not found" },

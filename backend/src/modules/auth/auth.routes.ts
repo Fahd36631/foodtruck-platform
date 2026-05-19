@@ -9,6 +9,8 @@ import { authController } from "./auth.controller";
 const authRouter = Router();
 
 authRouter.post("/register", asyncHandler(authController.register));
+authRouter.post("/verify-email", asyncHandler(authController.verifyEmail));
+authRouter.post("/resend-code", asyncHandler(authController.resendCode));
 authRouter.post("/login", asyncHandler(authController.login));
 authRouter.get("/me", authenticate, asyncHandler(authController.getMe));
 authRouter.patch("/me", authenticate, asyncHandler(authController.updateMe));

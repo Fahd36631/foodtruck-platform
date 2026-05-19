@@ -2,7 +2,7 @@ import { AppError } from "../../core/errors";
 import type { AuthUser } from "../../core/types/auth";
 import { ROLE_CODES } from "../shared/roles";
 import { TRUCK_APPROVAL_STATUS } from "../shared/truck-status";
-import { trucksRepository } from "./trucks.repository";
+import { trucksRepository, type AdminTruckListFilter } from "./trucks.repository";
 
 const toSlug = (displayName: string): string => {
   const suffix = Math.floor(Date.now() / 1000);
@@ -173,6 +173,15 @@ const getAdminStats = async (authUser: AuthUser) => {
   return trucksRepository.getAdminDashboardStats();
 };
 
+const listAdminTrucks = async (authUser: AuthUser, filter: AdminTruckListFilter) => {
+  if (authUser.roleCode !== ROLE_CODES.ADMIN) {
+    throw new AppError("TRUCK_ADMIN_ROLE_REQUIRED", { message: "Only admins can access admin truck lists" });
+  }
+
+  const items = await trucksRepository.listAdminTrucks(filter);
+  return { items };
+};
+
 const discover = async (filters: { city?: string; neighborhood?: string; categoryId?: number }) => {
   const items = await trucksRepository.listDiscoveryTrucks(filters);
   return { items };
@@ -231,6 +240,7 @@ export const trucksService = {
   reviewTruck,
   listPending,
   getAdminStats,
+  listAdminTrucks,
   discover,
   getDetails,
   listMine,

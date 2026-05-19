@@ -9,7 +9,9 @@ import {
   createAdminSchema,
   loginSchema,
   registerSchema,
-  updateProfileSchema
+  resendCodeSchema,
+  updateProfileSchema,
+  verifyEmailSchema
 } from "./auth.validator";
 
 const register = async (req: Request, res: Response) => {
@@ -50,11 +52,25 @@ const createAdmin = async (req: Request, res: Response) => {
   res.status(StatusCodes.CREATED).json(ok("Admin account created", result));
 };
 
+const verifyEmail = async (req: Request, res: Response) => {
+  const payload = verifyEmailSchema.parse(req.body);
+  const result = await authService.verifyEmail(payload);
+  res.status(StatusCodes.OK).json(ok("Email verified successfully", result));
+};
+
+const resendCode = async (req: Request, res: Response) => {
+  const payload = resendCodeSchema.parse(req.body);
+  const result = await authService.resendCode(payload);
+  res.status(StatusCodes.OK).json(ok("Verification code sent", result));
+};
+
 export const authController = {
   register,
   login,
   getMe,
   updateMe,
   changeMyPassword,
-  createAdmin
+  createAdmin,
+  verifyEmail,
+  resendCode
 };

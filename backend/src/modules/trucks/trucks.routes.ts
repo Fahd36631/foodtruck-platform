@@ -63,6 +63,12 @@ trucksRouter.get(
   asyncHandler(trucksController.listPending)
 );
 trucksRouter.get(
+  "/admin/trucks",
+  authenticate,
+  authorize(ROLE_CODES.ADMIN),
+  asyncHandler(trucksController.listAdminTrucks)
+);
+trucksRouter.get(
   "/admin/stats",
   authenticate,
   authorize(ROLE_CODES.ADMIN),
