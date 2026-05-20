@@ -360,7 +360,6 @@ const adminTruckListBaseQuery = () =>
       "tl.captured_at",
       "ml.license_number",
       "ml.document_url",
-      "ml.document_url as license_file_url",
       "ml.expires_at",
       "ml.review_status"
     )

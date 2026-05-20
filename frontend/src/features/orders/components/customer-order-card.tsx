@@ -37,11 +37,28 @@ const dt = (value: string | null) => {
   }
 };
 
-const summary = (order: PickupOrderItem) => {
-  return order.items
-    .slice(0, 2)
-    .map((item) => `${item.menu_item_name} × ${item.quantity.toLocaleString("ar-SA")}`)
-    .join("، ");
+const readyWindow = (order: PickupOrderItem) => {
+  if (order.ready_at) {
+    const ready = new Date(order.ready_at);
+    const start = new Date(ready.getTime() - 10 * 60 * 1000);
+    const fmt = (d: Date) =>
+      d.toLocaleTimeString("ar-SA", { hour: "2-digit", minute: "2-digit" });
+    return `${fmt(start)} - ${fmt(ready)}`;
+  }
+  if (order.estimated_ready_minutes && order.placed_at) {
+    const start = new Date(order.placed_at);
+    const end = new Date(start.getTime() + order.estimated_ready_minutes * 60 * 1000);
+    const fmt = (d: Date) =>
+      d.toLocaleTimeString("ar-SA", { hour: "2-digit", minute: "2-digit" });
+    return `${fmt(start)} - ${fmt(end)}`;
+  }
+  return "—";
+};
+
+const statusDotColor = (status: PickupOrderItem["status"]) => {
+  if (status === "ready" || status === "picked_up") return colors.success;
+  if (status === "cancelled") return colors.danger;
+  return colors.primary;
 };
 
 export const CustomerOrderCard = ({
@@ -63,50 +80,62 @@ export const CustomerOrderCard = ({
 
   return (
     <View style={[styles.card, isCurrent && styles.cardCurrent]}>
-      <View style={styles.topRow}>
-        <View style={styles.titleWrap}>
-          <Text style={styles.truckName} numberOfLines={1}>
-            {order.truck_name}
-          </Text>
+      <View style={styles.headerRow}>
+        <View style={styles.headerText}>
           <Text style={styles.orderNum}>#{order.order_number}</Text>
+          <Text style={styles.orderTime}>{dt(order.placed_at)}</Text>
         </View>
+        {imageUrl ? (
+          <Image source={{ uri: imageUrl }} style={styles.truckThumb} resizeMode="cover" />
+        ) : (
+          <View style={styles.truckThumbFallback}>
+            <Ionicons name="bus-outline" size={20} color={colors.primary} />
+          </View>
+        )}
+      </View>
+
+      <View style={styles.statusRow}>
         <View style={[styles.statusPill, isCancelled && styles.statusDanger]}>
+          <View style={[styles.statusDot, { backgroundColor: statusDotColor(order.status) }]} />
           <Text style={[styles.statusText, isCancelled && styles.statusDangerText]}>{statusLabel}</Text>
         </View>
+        <Text style={styles.truckName} numberOfLines={1}>
+          {order.truck_name}
+        </Text>
       </View>
 
-      <View style={styles.metaRow}>
-        <View style={styles.metaItem}>
-          <Ionicons name="cash-outline" size={iconSize.sm} color={colors.textMuted} />
-          <Text style={styles.metaText}>{money(order.total_amount)}</Text>
-        </View>
-        <View style={styles.metaItem}>
-          <Ionicons name="cube-outline" size={iconSize.sm} color={colors.textMuted} />
-          <Text style={styles.metaText}>{order.item_count.toLocaleString("ar-SA")} عناصر</Text>
-        </View>
-        <View style={styles.metaItem}>
-          <Ionicons name="time-outline" size={iconSize.sm} color={colors.textMuted} />
-          <Text style={styles.metaText}>{dt(order.placed_at)}</Text>
-        </View>
-      </View>
-
-      {isCurrent ? (
+      {!isCancelled ? (
         <View style={styles.timelineWrap}>
           <CustomerOrderTimeline status={order.status} />
         </View>
-      ) : (
-        <View style={styles.historyRow}>
-          {imageUrl ? <Image source={{ uri: imageUrl }} style={styles.thumb} resizeMode="cover" /> : null}
-          <View style={styles.historyTextWrap}>
-            <Text style={styles.historySummary} numberOfLines={2}>
-              {summary(order) || "بدون عناصر"}
-            </Text>
-            <Text style={styles.historySub}>
-              وقت التسليم: {dt(order.picked_up_at)} {order.status === "cancelled" ? "• ملغي" : ""}
-            </Text>
-          </View>
+      ) : null}
+
+      <View style={styles.infoGrid}>
+        <View style={styles.infoCell}>
+          <Ionicons name="time-outline" size={16} color={colors.primary} />
+          <Text style={styles.infoLabel}>وقت جاهزية الطلب</Text>
+          <Text style={styles.infoValue}>{readyWindow(order)}</Text>
         </View>
-      )}
+        <View style={styles.infoDivider} />
+        <View style={styles.infoCell}>
+          <Ionicons name="location-outline" size={16} color={colors.textMuted} />
+          <Text style={styles.infoLabel}>موقع الاستلام</Text>
+          <Text style={styles.infoValue} numberOfLines={1}>
+            {order.truck_name}
+          </Text>
+          <Text style={styles.infoSub} numberOfLines={1}>
+            استلام من موقع الترك
+          </Text>
+        </View>
+      </View>
+
+      {!isCurrent ? (
+        <View style={styles.summaryRow}>
+          <Text style={styles.summaryText}>
+            {order.item_count.toLocaleString("ar-SA")} عناصر • {money(order.total_amount)}
+          </Text>
+        </View>
+      ) : null}
 
       {!isCurrent && order.review ? (
         <View style={styles.ratingResultWrap}>
@@ -145,8 +174,8 @@ export const CustomerOrderCard = ({
           <AppButton label="إعادة الطلب" onPress={onPressReorder} variant="secondary" size="sm" />
         ) : null}
         <Pressable style={styles.detailsBtn} onPress={onPressDetails} hitSlop={8}>
-          <Text style={styles.detailsText}>عرض التفاصيل</Text>
-          <Ionicons name="chevron-back" size={iconSize.sm} color={colors.primary} />
+          <Text style={styles.detailsText}>تفاصيل الطلب</Text>
+          <Ionicons name="chevron-down" size={iconSize.sm} color={colors.primary} />
         </Pressable>
       </View>
     </View>
@@ -155,7 +184,7 @@ export const CustomerOrderCard = ({
 
 const styles = StyleSheet.create({
   card: {
-    borderRadius: radius.lg,
+    borderRadius: 18,
     borderWidth: 1,
     borderColor: colors.border,
     backgroundColor: colors.surface,
@@ -165,37 +194,64 @@ const styles = StyleSheet.create({
   },
   cardCurrent: {
     borderColor: colors.borderStrong,
-    backgroundColor: colors.surfaceElevated
+    backgroundColor: colors.surface
   },
-  topRow: {
-    flexDirection: "row-reverse",
+  headerRow: {
+    flexDirection: "row",
+    alignItems: "center",
     justifyContent: "space-between",
-    alignItems: "flex-start",
-    gap: spacing.xs
+    gap: spacing.sm
   },
-  titleWrap: {
-    flex: 1
-  },
-  truckName: {
-    color: colors.text,
-    fontSize: typography.h3,
-    fontWeight: "800",
-    textAlign: "right"
+  headerText: {
+    flex: 1,
+    alignItems: "flex-end"
   },
   orderNum: {
+    color: colors.text,
+    fontSize: typography.h3,
+    fontWeight: "900"
+  },
+  orderTime: {
+    marginTop: 4,
     color: colors.textMuted,
-    marginTop: 2,
     fontSize: typography.caption,
-    fontWeight: "700",
-    textAlign: "right"
+    fontWeight: "600"
+  },
+  truckThumb: {
+    width: 56,
+    height: 56,
+    borderRadius: 12,
+    backgroundColor: colors.bgDeep
+  },
+  truckThumbFallback: {
+    width: 56,
+    height: 56,
+    borderRadius: 12,
+    backgroundColor: colors.primarySoft,
+    alignItems: "center",
+    justifyContent: "center"
+  },
+  statusRow: {
+    flexDirection: "row-reverse",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: spacing.sm
   },
   statusPill: {
+    flexDirection: "row-reverse",
+    alignItems: "center",
+    gap: 6,
     borderRadius: radius.pill,
     backgroundColor: colors.surface2,
     borderWidth: 1,
     borderColor: colors.border,
     paddingHorizontal: 10,
-    paddingVertical: 4
+    paddingVertical: 5
+  },
+  statusDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4
   },
   statusText: {
     color: colors.textSecondary,
@@ -209,59 +265,60 @@ const styles = StyleSheet.create({
   statusDangerText: {
     color: colors.danger
   },
-  metaRow: {
-    flexDirection: "row-reverse",
-    flexWrap: "wrap",
-    gap: spacing.xs
-  },
-  metaItem: {
-    flexDirection: "row-reverse",
-    alignItems: "center",
-    gap: 6,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surface2,
-    paddingHorizontal: spacing.xs,
-    paddingVertical: 6
-  },
-  metaText: {
-    color: colors.textSecondary,
-    fontSize: typography.caption,
-    fontWeight: "700"
-  },
-  timelineWrap: {
-    marginTop: spacing.xs
-  },
-  historyRow: {
-    flexDirection: "row-reverse",
-    alignItems: "center",
-    gap: spacing.sm,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surface2,
-    padding: spacing.xs
-  },
-  thumb: {
-    width: 56,
-    height: 56,
-    borderRadius: radius.sm,
-    backgroundColor: colors.bgDeep
-  },
-  historyTextWrap: {
-    flex: 1
-  },
-  historySummary: {
-    color: colors.text,
+  truckName: {
+    flex: 1,
+    color: colors.textMuted,
     fontSize: typography.caption,
     fontWeight: "700",
+    textAlign: "left"
+  },
+  timelineWrap: {
+    paddingVertical: spacing.xs
+  },
+  infoGrid: {
+    flexDirection: "row-reverse",
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface2,
+    overflow: "hidden"
+  },
+  infoCell: {
+    flex: 1,
+    padding: spacing.sm,
+    alignItems: "flex-end",
+    gap: 4
+  },
+  infoDivider: {
+    width: 1,
+    backgroundColor: colors.border
+  },
+  infoLabel: {
+    color: colors.textMuted,
+    fontSize: typography.micro,
+    fontWeight: "700"
+  },
+  infoValue: {
+    color: colors.text,
+    fontSize: typography.caption,
+    fontWeight: "800",
     textAlign: "right"
   },
-  historySub: {
+  infoSub: {
     color: colors.textMuted,
-    marginTop: 2,
     fontSize: typography.micro,
+    textAlign: "right"
+  },
+  summaryRow: {
+    borderRadius: radius.md,
+    backgroundColor: colors.surface2,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs
+  },
+  summaryText: {
+    color: colors.textSecondary,
+    fontSize: typography.caption,
+    fontWeight: "700",
     textAlign: "right"
   },
   ratingResultWrap: {
@@ -311,13 +368,20 @@ const styles = StyleSheet.create({
     gap: spacing.sm
   },
   detailsBtn: {
+    flex: 1,
     flexDirection: "row-reverse",
     alignItems: "center",
-    gap: 4
+    justifyContent: "center",
+    gap: 6,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: colors.primary,
+    paddingVertical: 12,
+    backgroundColor: colors.surface
   },
   detailsText: {
     color: colors.primary,
-    fontSize: typography.caption,
+    fontSize: typography.bodySm,
     fontWeight: "800"
   }
 });

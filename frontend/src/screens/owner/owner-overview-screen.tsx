@@ -22,6 +22,8 @@ import * as Location from "expo-location";
 import * as ImagePicker from "expo-image-picker";
 import type { MapPressEvent } from "react-native-maps";
 
+import { OwnerTruckGate } from "@/features/owner/components/owner-truck-gate";
+import { OWNER } from "@/features/owner/theme";
 import { AppButton, AppContainer, CustomerMapView, EmptyState, LoadingSkeleton, Marker, StatusBadge } from "@/ui";
 import {
   getMyOwnerNotifications,
@@ -392,112 +394,11 @@ export const OwnerOverviewScreen = () => {
     );
   }
 
-  if (ownerTrucksQuery.isLoading) {
-    return (
-      <AppContainer edges={["top"]}>
-        <View style={styles.pad}>
-          <Text style={styles.pageTitle}>لوحة التشغيل</Text>
-          <LoadingSkeleton rows={6} />
-        </View>
-      </AppContainer>
-    );
-  }
-
-  if (ownerTrucksQuery.isError) {
-    return (
-      <AppContainer edges={["top"]}>
-        <View style={styles.pad}>
-          <Text style={styles.pageTitle}>لوحة التشغيل</Text>
-          <View style={styles.errorBanner}>
-            <Text style={styles.errorText}>{getReadableNetworkError(ownerTrucksQuery.error)}</Text>
-            <AppButton label="إعادة المحاولة" onPress={() => void ownerTrucksQuery.refetch()} variant="primary" fullWidth />
-          </View>
-        </View>
-      </AppContainer>
-    );
-  }
-
   const ownerTrucks = ownerTrucksQuery.data ?? [];
   const activeTruck = ownerTrucks[0];
   const latestAdminNotification = (ownerNotificationsQuery.data ?? [])[0];
 
-  if (!activeTruck) {
-    return (
-      <AppContainer edges={["top"]}>
-        <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-          <Text style={styles.pageTitle}>لوحة التشغيل</Text>
-          <View style={styles.noticeCard}>
-            <View style={styles.noticeIconWrap}>
-              <Ionicons name="restaurant-outline" size={iconSize.xl} color={colors.primary} />
-            </View>
-            <Text style={styles.noticeTitle}>أكمل بيانات الترك</Text>
-            <Text style={styles.noticeText}>
-              لاستقبال الطلبات، سجّل تركك وارفع الرخصة والموقع. بعد الموافقة ستظهر لوحة التشغيل كاملة.
-            </Text>
-            <AppButton
-              label="إكمال بيانات الترك"
-              onPress={() => navigation.navigate("OwnerOnboarding", { flow: "register" })}
-              variant="primary"
-              fullWidth
-            />
-          </View>
-        </ScrollView>
-      </AppContainer>
-    );
-  }
-
-  if (activeTruck.approval_status !== "approved") {
-    return (
-      <AppContainer edges={["top"]}>
-        <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-          <View style={styles.heroCardLight}>
-            <Text style={styles.eyebrow}>حالة التسجيل</Text>
-            <Text style={styles.pageTitle}>مرحبًا {fullName}</Text>
-            <Text style={styles.pageSub}>يمكنك متابعة حالة الترك من هنا أو من تبويب الحساب.</Text>
-          </View>
-          {latestAdminNotification ? (
-            <View style={styles.adminNoteCard}>
-              <Ionicons name="notifications-outline" size={iconSize.md} color={colors.warning} />
-              <View style={styles.notificationTextWrap}>
-                <Text style={styles.notificationTitle}>{latestAdminNotification.title}</Text>
-                <Text style={styles.notificationBody}>{latestAdminNotification.body}</Text>
-              </View>
-            </View>
-          ) : null}
-
-          <View style={styles.statusCardLight}>
-            <View style={[styles.approvalPill, activeTruck.approval_status === "pending" ? styles.approvalPending : styles.approvalRejected]}>
-              <Text style={styles.approvalPillText}>
-                {activeTruck.approval_status === "pending" ? "بانتظار المراجعة" : "يحتاج تعديل"}
-              </Text>
-            </View>
-            <Text style={styles.truckTitle}>{activeTruck.display_name}</Text>
-            <Text style={styles.mutedLine}>رقم التسجيل: #{activeTruck.id}</Text>
-            <Text style={styles.mutedLine}>تاريخ التقديم: {new Date(activeTruck.created_at).toLocaleDateString("ar-SA")}</Text>
-            {activeTruck.approval_status === "rejected" ? (
-              <View style={styles.rejectionBox}>
-                <Text style={styles.rejectionTitle}>سبب الرفض</Text>
-                <Text style={styles.rejectionBody}>{activeTruck.review_note?.trim() || "لم يتم إدخال سبب من الإدارة."}</Text>
-              </View>
-            ) : null}
-
-            <AppButton label="تحديث الحالة" onPress={() => void ownerTrucksQuery.refetch()} variant="secondary" fullWidth />
-
-            {activeTruck.approval_status === "rejected" ? (
-              <AppButton
-                label="تعديل البيانات وإعادة الإرسال"
-                onPress={() => navigation.navigate("OwnerOnboarding", { flow: "update" })}
-                variant="primary"
-                fullWidth
-              />
-            ) : null}
-          </View>
-        </ScrollView>
-      </AppContainer>
-    );
-  }
-
-  if (incomingOrders.isLoading) {
+  if (incomingOrders.isLoading && activeTruck?.approval_status === "approved") {
     return (
       <AppContainer edges={["top"]}>
         <View style={styles.pad}>
@@ -523,15 +424,30 @@ export const OwnerOverviewScreen = () => {
   }
 
   return (
-    <AppContainer edges={["top"]}>
-      <ScrollView
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled"
-        refreshControl={
-          <RefreshControl refreshing={refreshingOverview} onRefresh={onRefreshOverview} tintColor={colors.primary} />
-        }
-      >
+    <OwnerTruckGate
+      navigation={navigation}
+      pageTitle="لوحة التشغيل"
+      pageSubtitle="إدارة تشغيل الترك ومتابعة الطلبات والمنيو."
+      isLoading={ownerTrucksQuery.isLoading}
+      isError={ownerTrucksQuery.isError}
+      error={ownerTrucksQuery.error}
+      onRetry={() => void ownerTrucksQuery.refetch()}
+      trucks={ownerTrucks}
+      fullName={fullName}
+      latestNotification={latestAdminNotification ?? null}
+      setupDescription="لاستقبال الطلبات، سجّل تركك وارفع الرخصة والموقع. بعد الموافقة ستظهر لوحة التشغيل كاملة."
+      pendingDescription="يمكنك متابعة حالة الترك من هنا أو من تبويب الحساب."
+    >
+      {activeTruck?.approval_status === "approved" ? (
+      <AppContainer edges={["top"]}>
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          refreshControl={
+            <RefreshControl refreshing={refreshingOverview} onRefresh={onRefreshOverview} tintColor={OWNER.orange} />
+          }
+        >
         <View style={styles.topCard}>
           <Text style={styles.eyebrow}>تشغيل اليوم</Text>
           <View style={styles.titleRow}>
@@ -809,14 +725,16 @@ export const OwnerOverviewScreen = () => {
           </KeyboardAvoidingView>
         </View>
       </Modal>
-    </AppContainer>
+      </AppContainer>
+      ) : null}
+    </OwnerTruckGate>
   );
 };
 
 const MetricCard = ({ label, value, icon }: { label: string; value: number; icon: keyof typeof Ionicons.glyphMap }) => {
   return (
     <View style={styles.metricCard}>
-      <Ionicons name={icon} size={iconSize.md} color={colors.primary} />
+      <Ionicons name={icon} size={iconSize.md} color={OWNER.orange} />
       <Text style={styles.metricValue}>{value.toLocaleString("ar-SA")}</Text>
       <Text style={styles.metricLabel}>{label}</Text>
     </View>
@@ -831,8 +749,9 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingHorizontal: spacing.lg,
-    paddingTop: spacing.md,
-    paddingBottom: 120
+    paddingTop: spacing.sm,
+    paddingBottom: 120,
+    backgroundColor: OWNER.bg
   },
   pageTitle: {
     color: colors.brandBlue,
@@ -988,34 +907,39 @@ const styles = StyleSheet.create({
     fontSize: typography.bodySm
   },
   eyebrow: {
-    color: colors.primaryDark,
+    color: OWNER.orange,
     fontWeight: "800",
-    fontSize: typography.caption
+    fontSize: typography.caption,
+    textAlign: "right",
+    writingDirection: "rtl"
   },
   topCard: {
     borderRadius: radius.lg,
     borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
+    borderColor: OWNER.border,
+    backgroundColor: OWNER.white,
     padding: spacing.lg,
     marginBottom: spacing.md,
     gap: spacing.sm,
     ...shadows.soft
   },
   titleRow: {
-    flexDirection: "row",
+    flexDirection: "row-reverse",
     alignItems: "flex-start",
     justifyContent: "space-between",
     gap: spacing.sm
   },
   titleBlock: {
     flex: 1,
-    minWidth: 0
+    minWidth: 0,
+    alignItems: "flex-end"
   },
   truckDisplayName: {
-    color: colors.text,
+    color: OWNER.text,
     fontSize: typography.h2,
-    fontWeight: "800"
+    fontWeight: "800",
+    textAlign: "right",
+    writingDirection: "rtl"
   },
   ownerGreeting: {
     marginTop: 4,
