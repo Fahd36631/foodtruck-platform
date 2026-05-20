@@ -1,15 +1,38 @@
-import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { useMemo, useState } from "react";
+import { Alert, Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { LinearGradient } from "expo-linear-gradient";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 
-import { AppButton, AppContainer, EmptyState } from "@/ui";
+import { AppContainer, EmptyState } from "@/ui";
 import type { RootStackParamList } from "@/navigation/root-stack";
 import { useCartStore } from "@/store/cart-store";
-import { colors, iconSize, radius, shadows, spacing, typography } from "@/theme/tokens";
+import { resolveMediaUrl } from "@/utils/media-url";
+import { spacing, typography } from "@/theme/tokens";
 
 type Props = NativeStackScreenProps<RootStackParamList, "Cart">;
 
-const fmtSAR = (value: number) => `${value.toLocaleString("ar-SA", { maximumFractionDigits: 2 })} ر.س`;
+const CART = {
+  navy: "#1A2B48",
+  orange: "#FF6B00",
+  orangeDark: "#E55A00",
+  orangeSoft: "#FFF4EB",
+  white: "#FFFFFF",
+  canvas: "#F5F7FB",
+  textMuted: "#6B7280",
+  textSecondary: "#4B5563",
+  border: "#E8ECF2",
+  shadow: "rgba(26, 43, 72, 0.08)",
+  success: "#16A34A",
+  danger: "#DC2626",
+  dangerSoft: "#FEF2F2"
+} as const;
+
+const TRUCK_PLACEHOLDER = require("../../assets/images/truck_logo.png");
+const PICKUP_ETA_LABEL = "جاهز للاستلام خلال 10 - 15 د";
+
+const fmtAmount = (value: number) =>
+  `${value.toLocaleString("ar-SA", { maximumFractionDigits: 2 })} ر.س`;
 
 export const CartScreen = ({ navigation }: Props) => {
   const {
@@ -26,13 +49,14 @@ export const CartScreen = ({ navigation }: Props) => {
     clearCart
   } = useCartStore();
 
-  const itemCount = items.reduce((sum, item) => sum + item.quantity, 0);
+  const [notesOpen, setNotesOpen] = useState(() => notes.trim().length > 0);
+  const serviceFee = useMemo(() => Number(Math.max(0, total - subtotal).toFixed(2)), [subtotal, total]);
 
   if (items.length === 0) {
     return (
       <AppContainer edges={["top"]}>
         <View style={styles.emptyWrap}>
-          <PageHeader title="السلة" subtitle="لم تضف أي صنف بعد" />
+          <CartPageHeader title="السلة" onBack={() => navigation.goBack()} />
           <EmptyState
             title="السلة فارغة"
             description="اختر أصنافك من أي ترك ثم أكمل الدفع من هنا."
@@ -49,172 +73,362 @@ export const CartScreen = ({ navigation }: Props) => {
   return (
     <AppContainer edges={["top"]}>
       <ScrollView style={styles.flex} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <PageHeader
-          title="السلة"
-          subtitle={`${itemCount.toLocaleString("ar-SA")} صنف جاهز للطلب`}
-        />
+        <CartPageHeader title="السلة" onBack={() => navigation.goBack()} />
+
+        <View style={styles.pickupBadge}>
+          <Ionicons name="lock-closed-outline" size={12} color={CART.orange} />
+          <Text style={styles.pickupBadgeText}>{pickupTypeLabel}</Text>
+        </View>
 
         <View style={styles.truckCard}>
-          <View style={styles.truckIconWrap}>
-            <Ionicons name="storefront" size={iconSize.md} color={colors.primary} />
-          </View>
+          <Image source={TRUCK_PLACEHOLDER} style={styles.truckImage} resizeMode="cover" />
           <View style={styles.truckBody}>
-            <Text style={styles.truckName} numberOfLines={1}>{truckName}</Text>
-            <Text style={styles.truckMeta}>{pickupTypeLabel}</Text>
+            <Text style={styles.truckName} numberOfLines={1}>
+              {truckName}
+            </Text>
+            <Text style={styles.truckEta}>{PICKUP_ETA_LABEL}</Text>
+          </View>
+          <View style={styles.truckRefreshBtn}>
+            <Ionicons name="refresh-outline" size={18} color={CART.textMuted} />
           </View>
         </View>
 
-        <View style={styles.list}>
-          {items.map((item) => {
-            const lineTotal = item.price * item.quantity;
-            return (
-              <View key={item.menuItemId} style={styles.itemCard}>
-                <View style={styles.itemHeader}>
-                  <Text style={styles.itemName} numberOfLines={1}>{item.name}</Text>
-                  <Pressable
-                    onPress={() => removeItem(item.menuItemId)}
-                    hitSlop={12}
-                    style={styles.removeBtn}
-                    accessibilityLabel="حذف"
-                  >
-                    <Ionicons name="trash-outline" size={18} color={colors.danger} />
-                  </Pressable>
-                </View>
-
-                <View style={styles.itemFooter}>
-                  <View style={styles.qtyGroup}>
-                    <Pressable
-                      style={styles.qtyBtn}
-                      onPress={() => decrementItem(item.menuItemId)}
-                      hitSlop={8}
-                      accessibilityLabel="إنقاص"
-                    >
-                      <Ionicons name="remove" size={16} color={colors.primaryDark} />
-                    </Pressable>
-                    <Text style={styles.qtyText}>{item.quantity.toLocaleString("ar-SA")}</Text>
-                    <Pressable
-                      style={styles.qtyBtn}
-                      onPress={() => incrementItem(item.menuItemId)}
-                      hitSlop={8}
-                      accessibilityLabel="زيادة"
-                    >
-                      <Ionicons name="add" size={16} color={colors.primaryDark} />
-                    </Pressable>
-                  </View>
-                  <View style={styles.itemPriceBlock}>
-                    <Text style={styles.itemLineTotal}>{fmtSAR(lineTotal)}</Text>
-                    <Text style={styles.itemUnitPrice}>{fmtSAR(item.price)} للقطعة</Text>
-                  </View>
-                </View>
-              </View>
-            );
-          })}
+        <View style={styles.itemsCard}>
+          {items.map((item, index) => (
+            <View key={item.menuItemId}>
+              <CartItemCard
+                name={item.name}
+                description={`${item.quantity.toLocaleString("ar-SA")} × ${fmtAmount(item.price)} للقطعة`}
+                price={fmtAmount(item.price * item.quantity)}
+                imageUri={resolveMediaUrl(item.imageUrl)}
+                quantity={item.quantity}
+                onIncrement={() => incrementItem(item.menuItemId)}
+                onDecrement={() => decrementItem(item.menuItemId)}
+                onRemove={() => removeItem(item.menuItemId)}
+              />
+              {index < items.length - 1 ? <View style={styles.itemDivider} /> : null}
+            </View>
+          ))}
         </View>
 
-        <View style={styles.notesCard}>
-          <View style={styles.notesHead}>
-            <Ionicons name="create-outline" size={16} color={colors.primary} />
-            <Text style={styles.notesTitle}>ملاحظة الطلب</Text>
-            <Text style={styles.notesHint}>اختياري</Text>
+        {notesOpen ? (
+          <View style={styles.notesCard}>
+            <View style={styles.notesHead}>
+              <Text style={styles.notesTitle}>ملاحظة الطلب</Text>
+              <Pressable onPress={() => setNotesOpen(false)} hitSlop={8}>
+                <Ionicons name="close" size={18} color={CART.textMuted} />
+              </Pressable>
+            </View>
+            <TextInput
+              value={notes}
+              onChangeText={setNotes}
+              placeholder="مثال: بدون بصل، زيادة جبن..."
+              placeholderTextColor={CART.textMuted}
+              style={styles.notesInput}
+              multiline
+              textAlign="right"
+              autoFocus
+            />
           </View>
-          <TextInput
-            value={notes}
-            onChangeText={setNotes}
-            placeholder="مثال: بدون بصل، زيادة جبن..."
-            placeholderTextColor={colors.textMuted}
-            style={styles.notesInput}
-            multiline
-            textAlign="right"
-          />
-        </View>
-
-        <View style={styles.totalsCard}>
-          <View style={styles.totalRow}>
-            <Text style={styles.totalLabel}>المجموع الفرعي</Text>
-            <Text style={styles.totalValue}>{fmtSAR(subtotal)}</Text>
-          </View>
-          <View style={styles.totalsDivider} />
-          <View style={styles.totalRow}>
-            <Text style={styles.totalLabelStrong}>الإجمالي</Text>
-            <Text style={styles.totalValueStrong}>{fmtSAR(total)}</Text>
-          </View>
-        </View>
-
-        <View style={styles.actions}>
-          <AppButton
-            label="المتابعة إلى الدفع"
-            onPress={() => navigation.navigate("Checkout")}
-            variant="primary"
-            size="lg"
-            fullWidth
-          />
-          <Pressable
-            onPress={() =>
-              Alert.alert("تفريغ السلة", "هل تريد حذف كل الأصناف من السلة؟", [
-                { text: "إلغاء", style: "cancel" },
-                { text: "تفريغ", style: "destructive", onPress: clearCart }
-              ])
-            }
-            style={styles.clearBtn}
-            hitSlop={8}
-          >
-            <Ionicons name="trash-outline" size={16} color={colors.danger} />
-            <Text style={styles.clearText}>تفريغ السلة</Text>
+        ) : (
+          <Pressable style={styles.notesDashedBtn} onPress={() => setNotesOpen(true)}>
+            <View style={styles.notesDashedIcon}>
+              <Ionicons name="add" size={16} color={CART.orange} />
+            </View>
+            <Text style={styles.notesDashedText}>إضافة ملاحظة على الطلب</Text>
           </Pressable>
+        )}
+
+        <View style={styles.summaryCard}>
+          <SummaryRow label="المجموع الفرعي" value={fmtAmount(subtotal)} />
+          <SummaryRow label="رسوم الخدمة" value={fmtAmount(serviceFee)} info />
+          <View style={styles.summaryDivider} />
+          <SummaryRow label="الإجمالي" value={fmtAmount(total)} strong />
         </View>
+
+        <Pressable
+          onPress={() => navigation.navigate("Checkout")}
+          style={({ pressed }) => [styles.checkoutPressable, pressed && styles.checkoutPressed]}
+        >
+          <LinearGradient
+            colors={["#FF8533", CART.orange, CART.orangeDark]}
+            start={{ x: 0, y: 0.5 }}
+            end={{ x: 1, y: 0.5 }}
+            style={styles.checkoutGradient}
+          >
+            <View style={styles.checkoutInner}>
+              <View style={styles.checkoutArrowWrap}>
+                <Ionicons name="chevron-back" size={16} color={CART.orange} />
+              </View>
+              <Text style={styles.checkoutLabel}>المتابعة إلى الدفع</Text>
+            </View>
+          </LinearGradient>
+        </Pressable>
+
+        <Pressable
+          onPress={() =>
+            Alert.alert("تفريغ السلة", "هل تريد حذف كل الأصناف من السلة؟", [
+              { text: "إلغاء", style: "cancel" },
+              { text: "تفريغ", style: "destructive", onPress: clearCart }
+            ])
+          }
+          style={styles.clearBtn}
+          hitSlop={8}
+        >
+          <Ionicons name="trash-outline" size={16} color={CART.danger} />
+          <Text style={styles.clearText}>تفريغ السلة</Text>
+        </Pressable>
       </ScrollView>
     </AppContainer>
   );
 };
 
 // ============================================================
-// Page Header (shared layout across cart/checkout/orders)
+// Local UI components
 // ============================================================
 
-const PageHeader = ({ title, subtitle }: { title: string; subtitle?: string }) => (
+const CartPageHeader = ({ title, onBack }: { title: string; onBack: () => void }) => (
   <View style={pageHeader.wrap}>
-    <View style={pageHeader.bar} />
-    <View style={pageHeader.body}>
-      <Text style={pageHeader.title}>{title}</Text>
-      {subtitle ? <Text style={pageHeader.subtitle}>{subtitle}</Text> : null}
+    <Pressable onPress={onBack} style={({ pressed }) => [pageHeader.backBtn, pressed && pageHeader.backBtnPressed]} hitSlop={8}>
+      <Ionicons name="chevron-back" size={20} color={CART.white} />
+    </Pressable>
+    <Text style={pageHeader.title}>{title}</Text>
+    <View style={pageHeader.spacer} />
+  </View>
+);
+
+const CartItemCard = ({
+  name,
+  description,
+  price,
+  imageUri,
+  quantity,
+  onIncrement,
+  onDecrement,
+  onRemove
+}: {
+  name: string;
+  description: string;
+  price: string;
+  imageUri: string | null;
+  quantity: number;
+  onIncrement: () => void;
+  onDecrement: () => void;
+  onRemove: () => void;
+}) => (
+  <View style={itemStyles.row}>
+    <View style={itemStyles.leftCol}>
+      <Pressable onPress={onRemove} style={itemStyles.removeBtn} hitSlop={8} accessibilityLabel="حذف">
+        <Ionicons name="trash-outline" size={16} color={CART.textMuted} />
+      </Pressable>
+      <View style={itemStyles.qtyRow}>
+        <Pressable style={itemStyles.qtyBtn} onPress={onIncrement} hitSlop={8} accessibilityLabel="زيادة">
+          <Ionicons name="add" size={16} color={CART.orange} />
+        </Pressable>
+        <Text style={itemStyles.qtyText}>{quantity.toLocaleString("ar-SA")}</Text>
+        <Pressable style={itemStyles.qtyBtn} onPress={onDecrement} hitSlop={8} accessibilityLabel="إنقاص">
+          <Ionicons name="remove" size={16} color={CART.orange} />
+        </Pressable>
+      </View>
+    </View>
+
+    <View style={itemStyles.meta}>
+      <Text style={itemStyles.price}>{price}</Text>
+      <Text style={itemStyles.name} numberOfLines={1}>
+        {name}
+      </Text>
+      <Text style={itemStyles.description} numberOfLines={2}>
+        {description}
+      </Text>
+    </View>
+
+    <View style={itemStyles.thumbWrap}>
+      {imageUri ? (
+        <Image source={{ uri: imageUri }} style={itemStyles.thumb} resizeMode="cover" />
+      ) : (
+        <View style={itemStyles.thumbFallback}>
+          <Ionicons name="fast-food-outline" size={20} color={CART.orange} />
+        </View>
+      )}
+    </View>
+  </View>
+);
+
+const SummaryRow = ({
+  label,
+  value,
+  strong = false,
+  info = false
+}: {
+  label: string;
+  value: string;
+  strong?: boolean;
+  info?: boolean;
+}) => (
+  <View style={summaryStyles.row}>
+    <Text style={[summaryStyles.value, strong && summaryStyles.valueStrong]}>{value}</Text>
+    <View style={summaryStyles.labelWrap}>
+      {info ? <Ionicons name="information-circle-outline" size={14} color={CART.textMuted} style={summaryStyles.infoIcon} /> : null}
+      <Text style={[summaryStyles.label, strong && summaryStyles.labelStrong]}>{label}</Text>
     </View>
   </View>
 );
 
 const pageHeader = StyleSheet.create({
   wrap: {
-    flexDirection: "row-reverse",
+    flexDirection: "row",
     alignItems: "center",
-    gap: spacing.sm,
-    marginBottom: spacing.md
+    justifyContent: "space-between",
+    marginBottom: spacing.sm
   },
-  bar: {
-    width: 4,
-    height: 28,
-    borderRadius: 2,
-    backgroundColor: colors.primary
+  backBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: CART.orange,
+    alignItems: "center",
+    justifyContent: "center"
   },
-  body: { flex: 1, minWidth: 0 },
+  backBtnPressed: {
+    opacity: 0.9
+  },
   title: {
-    color: colors.text,
+    flex: 1,
+    color: CART.navy,
     fontSize: typography.h1,
     fontWeight: "800",
-    textAlign: "right"
+    textAlign: "right",
+    paddingHorizontal: spacing.sm
   },
-  subtitle: {
-    marginTop: 2,
-    color: colors.textMuted,
-    fontSize: typography.bodySm,
-    textAlign: "right"
+  spacer: {
+    width: 40
   }
 });
 
-// ============================================================
-// Styles
-// ============================================================
+const itemStyles = StyleSheet.create({
+  row: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: spacing.sm,
+    paddingVertical: spacing.sm
+  },
+  thumbWrap: {
+    width: 72,
+    height: 72,
+    borderRadius: 12,
+    overflow: "hidden",
+    backgroundColor: CART.orangeSoft
+  },
+  thumb: {
+    width: "100%",
+    height: "100%"
+  },
+  thumbFallback: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center"
+  },
+  meta: {
+    flex: 1,
+    alignItems: "flex-end",
+    gap: 2
+  },
+  name: {
+    color: CART.navy,
+    fontWeight: "800",
+    fontSize: typography.body,
+    textAlign: "right"
+  },
+  description: {
+    color: CART.textMuted,
+    fontSize: typography.caption,
+    textAlign: "right",
+    lineHeight: 18
+  },
+  price: {
+    color: CART.orange,
+    fontWeight: "800",
+    fontSize: typography.body,
+    textAlign: "right",
+    marginBottom: 2
+  },
+  leftCol: {
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    minHeight: 72,
+    gap: spacing.sm
+  },
+  removeBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: CART.border,
+    backgroundColor: CART.white,
+    alignItems: "center",
+    justifyContent: "center"
+  },
+  qtyRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6
+  },
+  qtyBtn: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    borderWidth: 1.5,
+    borderColor: CART.orange,
+    backgroundColor: CART.white,
+    alignItems: "center",
+    justifyContent: "center"
+  },
+  qtyText: {
+    minWidth: 20,
+    textAlign: "center",
+    color: CART.navy,
+    fontWeight: "800",
+    fontSize: typography.bodySm
+  }
+});
+
+const summaryStyles = StyleSheet.create({
+  row: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between"
+  },
+  labelWrap: {
+    flexDirection: "row-reverse",
+    alignItems: "center"
+  },
+  infoIcon: {
+    marginLeft: 4
+  },
+  label: {
+    color: CART.textSecondary,
+    fontSize: typography.bodySm,
+    fontWeight: "600"
+  },
+  labelStrong: {
+    color: CART.navy,
+    fontWeight: "800",
+    fontSize: typography.body
+  },
+  value: {
+    color: CART.navy,
+    fontSize: typography.bodySm,
+    fontWeight: "700"
+  },
+  valueStrong: {
+    color: CART.orange,
+    fontSize: typography.h2,
+    fontWeight: "900"
+  }
+});
 
 const styles = StyleSheet.create({
-  flex: { flex: 1 },
+  flex: { flex: 1, backgroundColor: CART.canvas },
   emptyWrap: {
     flex: 1,
     paddingHorizontal: spacing.lg,
@@ -225,198 +439,188 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.md,
     paddingBottom: 120,
-    gap: spacing.sm
+    gap: spacing.md
   },
-
-  // Truck summary
-  truckCard: {
+  pickupBadge: {
+    alignSelf: "flex-end",
     flexDirection: "row-reverse",
     alignItems: "center",
-    gap: spacing.sm,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
-    padding: spacing.md,
-    ...shadows.soft
+    gap: 4,
+    borderRadius: 999,
+    backgroundColor: CART.orangeSoft,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    marginTop: -4
   },
-  truckIconWrap: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: colors.primarySoft,
+  pickupBadgeText: {
+    color: CART.orange,
+    fontSize: typography.micro,
+    fontWeight: "800"
+  },
+  truckCard: {
+    flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center"
+    gap: spacing.sm,
+    borderRadius: 16,
+    backgroundColor: CART.white,
+    padding: spacing.md,
+    shadowColor: CART.shadow,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 1,
+    shadowRadius: 12,
+    elevation: 3
   },
-  truckBody: { flex: 1, minWidth: 0 },
+  truckImage: {
+    width: 56,
+    height: 56,
+    borderRadius: 12
+  },
+  truckBody: {
+    flex: 1,
+    alignItems: "flex-end"
+  },
   truckName: {
-    color: colors.text,
+    color: CART.navy,
     fontSize: typography.h3,
     fontWeight: "800",
     textAlign: "right"
   },
-  truckMeta: {
-    marginTop: 2,
-    color: colors.textSecondary,
+  truckEta: {
+    marginTop: 4,
+    color: CART.success,
     fontSize: typography.caption,
-    textAlign: "right"
-  },
-
-  // Items
-  list: { gap: spacing.sm },
-  itemCard: {
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
-    padding: spacing.md,
-    gap: spacing.sm,
-    ...shadows.soft
-  },
-  itemHeader: {
-    flexDirection: "row-reverse",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: spacing.sm
-  },
-  itemName: {
-    flex: 1,
-    color: colors.text,
     fontWeight: "700",
-    fontSize: typography.body,
     textAlign: "right"
   },
-  removeBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: colors.dangerMuted,
+  truckRefreshBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 10,
     alignItems: "center",
     justifyContent: "center"
   },
-  itemFooter: {
+  itemsCard: {
+    borderRadius: 16,
+    backgroundColor: CART.white,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+    shadowColor: CART.shadow,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 1,
+    shadowRadius: 12,
+    elevation: 3
+  },
+  itemDivider: {
+    height: 1,
+    backgroundColor: CART.border
+  },
+  notesDashedBtn: {
     flexDirection: "row-reverse",
     alignItems: "center",
-    justifyContent: "space-between",
-    gap: spacing.sm
+    justifyContent: "center",
+    gap: spacing.sm,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderStyle: "dashed",
+    borderColor: CART.orange,
+    backgroundColor: CART.orangeSoft,
+    paddingVertical: 14,
+    paddingHorizontal: spacing.md
   },
-  qtyGroup: {
-    flexDirection: "row-reverse",
-    alignItems: "center",
-    gap: spacing.xs,
-    backgroundColor: colors.primarySoft,
-    paddingHorizontal: 4,
-    paddingVertical: 4,
-    borderRadius: radius.pill
-  },
-  qtyBtn: {
+  notesDashedIcon: {
     width: 28,
     height: 28,
     borderRadius: 14,
-    backgroundColor: colors.surface,
+    backgroundColor: CART.white,
     alignItems: "center",
     justifyContent: "center"
   },
-  qtyText: {
-    minWidth: 24,
-    textAlign: "center",
-    color: colors.text,
+  notesDashedText: {
+    color: CART.orange,
     fontWeight: "800",
     fontSize: typography.bodySm
   },
-  itemPriceBlock: { alignItems: "flex-start" },
-  itemLineTotal: {
-    color: colors.primaryDark,
-    fontWeight: "800",
-    fontSize: typography.body
-  },
-  itemUnitPrice: {
-    marginTop: 2,
-    color: colors.textMuted,
-    fontSize: typography.micro
-  },
-
-  // Notes
   notesCard: {
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderStyle: "dashed",
+    borderColor: CART.orange,
+    backgroundColor: CART.orangeSoft,
     padding: spacing.md,
     gap: spacing.sm
   },
   notesHead: {
     flexDirection: "row-reverse",
     alignItems: "center",
-    gap: 6
+    justifyContent: "space-between"
   },
   notesTitle: {
-    color: colors.text,
+    color: CART.navy,
     fontWeight: "800",
     fontSize: typography.bodySm
   },
-  notesHint: {
-    marginStart: "auto",
-    color: colors.textMuted,
-    fontSize: typography.micro,
-    fontWeight: "600"
-  },
   notesInput: {
-    minHeight: 70,
-    borderRadius: radius.md,
+    minHeight: 72,
+    borderRadius: 12,
     borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surface2,
+    borderColor: CART.border,
+    backgroundColor: CART.white,
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.sm,
-    color: colors.text,
+    color: CART.navy,
     textAlignVertical: "top",
     fontSize: typography.bodySm
   },
-
-  // Totals
-  totalsCard: {
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surfaceElevated,
+  summaryCard: {
+    borderRadius: 16,
+    backgroundColor: CART.white,
     padding: spacing.md,
-    gap: spacing.xs
+    gap: spacing.sm,
+    shadowColor: CART.shadow,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 1,
+    shadowRadius: 12,
+    elevation: 3
   },
-  totalRow: {
+  summaryDivider: {
+    height: 1,
+    backgroundColor: CART.border,
+    marginVertical: 2
+  },
+  checkoutPressable: {
+    borderRadius: 16,
+    overflow: "hidden",
+    marginTop: spacing.xs
+  },
+  checkoutPressed: {
+    opacity: 0.94
+  },
+  checkoutGradient: {
+    minHeight: 54,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: spacing.lg
+  },
+  checkoutInner: {
     flexDirection: "row-reverse",
     alignItems: "center",
-    justifyContent: "space-between"
+    justifyContent: "center",
+    gap: spacing.sm,
+    width: "100%"
   },
-  totalsDivider: {
-    height: 1,
-    backgroundColor: colors.border,
-    marginVertical: 4
-  },
-  totalLabel: {
-    color: colors.textSecondary,
-    fontSize: typography.bodySm
-  },
-  totalValue: {
-    color: colors.text,
-    fontWeight: "700",
-    fontSize: typography.bodySm
-  },
-  totalLabelStrong: {
-    color: colors.text,
+  checkoutLabel: {
+    color: CART.white,
     fontSize: typography.body,
     fontWeight: "800"
   },
-  totalValueStrong: {
-    color: colors.primary,
-    fontSize: typography.h2,
-    fontWeight: "900"
-  },
-
-  // Actions
-  actions: {
-    marginTop: spacing.sm,
-    gap: spacing.sm
+  checkoutArrowWrap: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: CART.white,
+    alignItems: "center",
+    justifyContent: "center"
   },
   clearBtn: {
     alignSelf: "center",
@@ -427,7 +631,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md
   },
   clearText: {
-    color: colors.danger,
+    color: CART.danger,
     fontSize: typography.bodySm,
     fontWeight: "700"
   }

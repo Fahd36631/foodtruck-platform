@@ -9,7 +9,6 @@ const authHeaders = (accessToken?: string) =>
 export const getDiscoveryTrucks = async (filters: DiscoveryFilters, accessToken?: string) => {
   const response = await apiClient.get<ApiEnvelope<{ items: TruckDiscoveryItem[] }>>("/trucks/discovery", {
     params: {
-      _t: Date.now(),
       city: filters.city,
       neighborhood: filters.neighborhood,
       categoryId: filters.categoryId
@@ -57,16 +56,19 @@ export type OwnerTruckDraft = {
   longitude: number | null;
   license_number: string | null;
   document_url: string | null;
+  license_file_url?: string | null;
   expires_at: string | null;
+  category_id?: number | null;
   category_name: string | null;
+  rejection_reason?: string | null;
   captured_at?: string | null;
 };
 
-export const getMyOwnerTruckDraft = async (accessToken: string) => {
-  const response = await apiClient.get<ApiEnvelope<OwnerTruckDraft | null>>("/trucks/mine/draft", {
+export const getMyOwnerTruckDraft = async (accessToken: string): Promise<OwnerTruckDraft | null> => {
+  const response = await apiClient.get<ApiEnvelope<{ item: OwnerTruckDraft | null }>>("/trucks/mine/draft", {
     headers: { Authorization: `Bearer ${accessToken}` }
   });
-  return response.data.data;
+  return response.data.data.item ?? null;
 };
 
 export type OwnerNotificationItem = {
@@ -152,7 +154,15 @@ export const updateOwnerTruckStatus = async (
   );
 };
 
-type UploadResult = { url: string; fileName?: string };
+type UploadResult = {
+  url: string;
+  secure_url: string;
+  original_secure_url?: string;
+  public_id?: string;
+  format?: string;
+  resource_type?: string;
+  fileName?: string;
+};
 
 export const uploadSingleFile = async (
   file: { uri: string; fileName?: string; mimeType?: string },

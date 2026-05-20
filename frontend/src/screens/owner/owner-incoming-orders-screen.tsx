@@ -14,7 +14,11 @@ import {
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Ionicons } from "@expo/vector-icons";
 
-import { AppButton, AppContainer, EmptyState, LoadingSkeleton } from "@/ui";
+import { AppButton, AppContainer, LoadingSkeleton } from "@/ui";
+import { OwnerEmptyState } from "@/features/owner/components/owner-empty-state";
+import { OwnerPageHeader } from "@/features/owner/components/owner-page-header";
+import { OwnerTruckGate } from "@/features/owner/components/owner-truck-gate";
+import { OWNER, ownerRadius, ownerShadow, ownerSpacing } from "@/features/owner/theme";
 import { getMyOwnerTrucks } from "@/features/trucks/api";
 import { getIncomingOwnerOrders, updatePickupOrderStatus, type IncomingPickupOrder } from "@/features/orders/api";
 import { getReadableNetworkError } from "@/api/network-error";
@@ -47,7 +51,7 @@ const statusTone = (status: string) => {
     case "ready":
       return { bg: colors.successMuted, border: "rgba(15, 157, 90, 0.35)", fg: colors.success };
     case "picked_up":
-      return { bg: colors.brandBlueSoft, border: "rgba(21, 58, 138, 0.25)", fg: colors.brandBlue };
+      return { bg: OWNER.orangeLight, border: "rgba(255, 107, 0, 0.28)", fg: OWNER.orange };
     case "cancelled":
       return { bg: colors.dangerMuted, border: "rgba(230, 57, 70, 0.35)", fg: colors.danger };
     default:
@@ -87,6 +91,7 @@ export const OwnerIncomingOrdersScreen = () => {
   const queryClient = useQueryClient();
   const accessToken = useAuthStore((s) => s.accessToken) ?? "";
   const roleCode = useAuthStore((s) => s.user?.roleCode);
+  const fullName = useAuthStore((s) => s.user?.fullName) ?? "صاحب الترك";
   const [filter, setFilter] = useState<(typeof FILTERS)[number]["key"]>("all");
   const [pendingConfirmation, setPendingConfirmation] = useState<{
     orderId: number;
@@ -148,109 +153,73 @@ export const OwnerIncomingOrdersScreen = () => {
     );
   }
 
-  if (incomingOrders.isLoading || ownerTrucksQuery.isLoading) {
-    return (
-      <AppContainer edges={["top"]}>
-        <View style={styles.pad}>
-          <Text style={styles.pageTitle}>طلبات الوارد</Text>
-          <LoadingSkeleton rows={6} />
-        </View>
-      </AppContainer>
-    );
-  }
-
-  if (incomingOrders.isError) {
-    return (
-      <AppContainer edges={["top"]}>
-        <View style={styles.pad}>
-          <Text style={styles.pageTitle}>طلبات الوارد</Text>
-          <View style={styles.errorCard}>
-            <Text style={styles.errorText}>{getReadableNetworkError(incomingOrders.error)}</Text>
-            <AppButton label="إعادة المحاولة" onPress={() => void incomingOrders.refetch()} variant="primary" />
-          </View>
-        </View>
-      </AppContainer>
-    );
-  }
-
   const ownerTrucks = ownerTrucksQuery.data ?? [];
-  const hasApprovedTruck = ownerTrucks.some((truck) => truck.approval_status === "approved");
-
-  if (!ownerTrucks.length) {
-    return (
-      <AppContainer edges={["top"]}>
-        <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
-          <Text style={styles.pageTitle}>طلبات الوارد</Text>
-          <Text style={styles.pageSub}>طلبات الاستلام من الزبائن على موقع تركك.</Text>
-          <EmptyState
-            title="أكمل بيانات الترك أولًا"
-            description="بعد تسجيل الترك واعتماده من الإدارة ستظهر الطلبات هنا."
-            icon="restaurant-outline"
-            actionLabel="إكمال البيانات"
-            onAction={() => navigation.navigate("OwnerOnboarding", { flow: "register" })}
-            variant="card"
-          />
-        </ScrollView>
-      </AppContainer>
-    );
-  }
-
-  if (!hasApprovedTruck) {
-    return (
-      <AppContainer edges={["top"]}>
-        <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
-          <Text style={styles.pageTitle}>طلبات الوارد</Text>
-          <Text style={styles.pageSub}>بانتظار اعتماد الإدارة لتفعيل استقبال الطلبات.</Text>
-          <View style={styles.waitCard}>
-            <Ionicons name="hourglass-outline" size={iconSize.xl} color={colors.warning} />
-            <Text style={styles.waitTitle}>قريبًا</Text>
-            <Text style={styles.waitBody}>سيتم تفعيل استقبال الطلبات فور اعتماد تركك.</Text>
-          </View>
-        </ScrollView>
-      </AppContainer>
-    );
-  }
 
   return (
-    <AppContainer edges={["top"]}>
-      <ScrollView
-        style={styles.flex}
-        contentContainerStyle={styles.scroll}
-        showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl refreshing={incomingOrders.isFetching} onRefresh={() => void onRefresh()} tintColor={colors.primary} />
-        }
-      >
-        <Text style={styles.pageTitle}>طلبات الوارد</Text>
-        <Text style={styles.pageSub}>تحديث حالة الطلب للاستلام من موقع الترك فقط — بدون توصيل.</Text>
+    <OwnerTruckGate
+      navigation={navigation}
+      pageTitle="طلبات الوارد"
+      pageSubtitle="طلبات الاستلام من الزبائن على موقع تركك."
+      isLoading={ownerTrucksQuery.isLoading}
+      isError={ownerTrucksQuery.isError}
+      error={ownerTrucksQuery.error}
+      onRetry={() => void ownerTrucksQuery.refetch()}
+      trucks={ownerTrucks}
+      fullName={fullName}
+      setupDescription="بعد تسجيل الترك واعتماده من الإدارة ستظهر الطلبات هنا."
+      pendingDescription="بانتظار اعتماد الإدارة لتفعيل استقبال الطلبات."
+    >
+      <AppContainer edges={["top"]}>
+        <ScrollView
+          style={styles.flex}
+          contentContainerStyle={styles.scroll}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl refreshing={incomingOrders.isFetching} onRefresh={() => void onRefresh()} tintColor={OWNER.orange} />
+          }
+        >
+          <OwnerPageHeader
+            title="طلبات الوارد"
+            subtitle="تحديث حالة الطلب للاستلام من موقع الترك فقط — بدون توصيل."
+          />
 
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipsRow}>
-          {FILTERS.map((f) => {
-            const active = filter === f.key;
-            return (
-              <Pressable
-                key={f.key}
-                onPress={() => setFilter(f.key)}
-                style={[styles.chip, active && styles.chipActive]}
-              >
-                <Text style={[styles.chipText, active && styles.chipTextActive]}>{f.label}</Text>
-              </Pressable>
-            );
-          })}
-        </ScrollView>
+          {incomingOrders.isLoading ? <LoadingSkeleton rows={4} /> : null}
 
-        {filteredOrders.length === 0 ? (
-          <View style={styles.emptyWrap}>
-            <EmptyState
-              title="لا طلبات في هذا التصفية"
-              description="عند وصول طلبات جديدة ستظهر هنا مع رقم الطلب وحالة التحضير."
-              icon="receipt-outline"
-              actionLabel="تحديث"
-              onAction={() => void onRefresh()}
-              variant="card"
-            />
-          </View>
-        ) : (
+          {incomingOrders.isError ? (
+            <View style={styles.errorCard}>
+              <Text style={styles.errorText}>{getReadableNetworkError(incomingOrders.error)}</Text>
+              <AppButton label="إعادة المحاولة" onPress={() => void incomingOrders.refetch()} variant="primary" fullWidth />
+            </View>
+          ) : null}
+
+        {!incomingOrders.isLoading && !incomingOrders.isError ? (
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipsRow}>
+            {FILTERS.map((f) => {
+              const active = filter === f.key;
+              return (
+                <Pressable
+                  key={f.key}
+                  onPress={() => setFilter(f.key)}
+                  style={[styles.chip, active && styles.chipActive]}
+                >
+                  <Text style={[styles.chipText, active && styles.chipTextActive]}>{f.label}</Text>
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+        ) : null}
+
+        {!incomingOrders.isLoading && !incomingOrders.isError && filteredOrders.length === 0 ? (
+          <OwnerEmptyState
+            icon="receipt-outline"
+            title="لا توجد طلبات حاليًا"
+            description="عند وصول طلبات جديدة ستظهر هنا مع رقم الطلب وحالة التحضير."
+            actionLabel="تحديث"
+            onAction={() => void onRefresh()}
+          />
+        ) : null}
+
+        {!incomingOrders.isLoading && !incomingOrders.isError && filteredOrders.length > 0 ? (
           <View style={styles.list}>
             {filteredOrders.map((order) => {
               const updatingThis =
@@ -277,9 +246,9 @@ export const OwnerIncomingOrdersScreen = () => {
               );
             })}
           </View>
-        )}
-      </ScrollView>
-      {pendingConfirmation ? (
+        ) : null}
+        </ScrollView>
+        {pendingConfirmation ? (
         <View style={styles.modalOverlay}>
           <View style={styles.modalCard}>
             <Text style={styles.modalTitle}>تأكيد تحديث الحالة</Text>
@@ -310,8 +279,9 @@ export const OwnerIncomingOrdersScreen = () => {
             </View>
           </View>
         </View>
-      ) : null}
-    </AppContainer>
+        ) : null}
+      </AppContainer>
+    </OwnerTruckGate>
   );
 };
 
@@ -448,16 +418,18 @@ function OwnerOrderCard({
 }
 
 const styles = StyleSheet.create({
-  flex: { flex: 1 },
+  flex: { flex: 1, backgroundColor: OWNER.bg },
   pad: {
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.md,
-    paddingBottom: 120
+    paddingBottom: 120,
+    backgroundColor: OWNER.bg
   },
   scroll: {
     paddingHorizontal: spacing.lg,
-    paddingTop: spacing.md,
-    paddingBottom: 120
+    paddingTop: spacing.sm,
+    paddingBottom: 120,
+    backgroundColor: OWNER.bg
   },
   pageTitle: {
     color: colors.brandBlue,
@@ -486,16 +458,17 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface
   },
   chipActive: {
-    backgroundColor: colors.primaryMuted,
-    borderColor: colors.borderStrong
+    backgroundColor: OWNER.orangeLight,
+    borderColor: "rgba(255, 107, 0, 0.28)"
   },
   chipText: {
-    color: colors.textSecondary,
+    color: OWNER.muted,
     fontWeight: "700",
-    fontSize: typography.caption
+    fontSize: typography.caption,
+    writingDirection: "rtl"
   },
   chipTextActive: {
-    color: colors.primaryDark
+    color: OWNER.orange
   },
   emptyWrap: {
     marginTop: spacing.sm
@@ -504,16 +477,16 @@ const styles = StyleSheet.create({
     gap: spacing.sm
   },
   card: {
-    borderRadius: radius.lg,
+    borderRadius: ownerRadius.card,
     borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
+    borderColor: OWNER.border,
+    backgroundColor: OWNER.white,
     padding: spacing.md,
     marginBottom: spacing.sm,
     ...shadows.soft
   },
   cardTop: {
-    flexDirection: "row",
+    flexDirection: "row-reverse",
     justifyContent: "space-between",
     alignItems: "flex-start",
     gap: spacing.sm,
@@ -521,7 +494,8 @@ const styles = StyleSheet.create({
   },
   cardTopLeft: {
     flex: 1,
-    minWidth: 0
+    minWidth: 0,
+    alignItems: "flex-end"
   },
   orderNum: {
     color: colors.primaryDark,
