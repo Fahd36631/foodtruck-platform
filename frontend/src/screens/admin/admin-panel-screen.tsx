@@ -1,7 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import {
-  Alert,
   Image,
   KeyboardAvoidingView,
   Linking,
@@ -10,7 +9,6 @@ import {
   Pressable,
   RefreshControl,
   ScrollView,
-  Share,
   StyleSheet,
   Text,
   TextInput,
@@ -21,17 +19,15 @@ import MapView, { Marker } from "react-native-maps";
 import { useNavigation } from "@react-navigation/native";
 import type { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
 
-import { AdminMetricListModal } from "@/features/admin/components/admin-metric-list-modal";
 import { DashboardStatCard as AdminDashboardStatCard } from "@/features/admin/components/dashboard-stat-card";
 import { QuickActionCard as AdminQuickActionCard } from "@/features/admin/components/quick-action-card";
-import { AppButton, AppContainer, LoadingSkeleton } from "@/ui";
-import { getAdminStats, getPendingTrucks, reviewTruck, type AdminTruckListFilter, type PendingTruck } from "@/features/admin/api";
+import { AppButton, AppContainer, EmptyState, LoadingSkeleton } from "@/ui";
+import { getAdminStats, getPendingTrucks, reviewTruck } from "@/features/admin/api";
 import type { MainTabParamList } from "@/navigation/main-tabs";
 import { getReadableNetworkError } from "@/api/network-error";
 import { useAuthStore } from "@/store/auth-store";
 import { colors, radius, shadows, spacing, typography } from "@/theme/tokens";
 import { resolveMediaUrl } from "@/utils/media-url";
-import { formatLicenseExpiryForAdmin } from "@/utils/license-document-url";
 
 export const AdminPanelScreen = () => {
   const navigation = useNavigation<BottomTabNavigationProp<MainTabParamList>>();
@@ -40,8 +36,7 @@ export const AdminPanelScreen = () => {
   const accessToken = useAuthStore((s) => s.accessToken) ?? "";
   const fullName = useAuthStore((s) => s.user?.fullName) ?? "مدير النظام";
   const roleCode = useAuthStore((s) => s.user?.roleCode);
-  const [activeMetric, setActiveMetric] = useState<AdminTruckListFilter | null>(null);
-  const [selectedTruck, setSelectedTruck] = useState<PendingTruck | null>(null);
+  const [selectedTruckId, setSelectedTruckId] = useState<number | null>(null);
   const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
   const [rejectingTruckId, setRejectingTruckId] = useState<number | null>(null);
   const [rejectionReason, setRejectionReason] = useState("");
@@ -56,35 +51,18 @@ export const AdminPanelScreen = () => {
     queryFn: () => getAdminStats(accessToken),
     enabled: !!accessToken
   });
+  const selectedTruck = (pendingQuery.data ?? []).find((truck) => truck.id === selectedTruckId) ?? null;
   const pendingItems = pendingQuery.data ?? [];
-  const adminStats = statsQuery.data;
-  const totalPending = adminStats?.pendingRequests ?? pendingItems.length;
-  const approvedCount = adminStats?.approvedTrucks ?? 0;
-  const rejectedCount = adminStats?.rejectedTrucks ?? 0;
-  const todayRequests = adminStats?.todayRequests ?? 0;
-  const selectedLicenseFileUrl = selectedTruck?.license_file_url ?? selectedTruck?.document_url ?? null;
+  const totalPending = statsQuery.data?.pendingRequests ?? 0;
 
-  /**
-   * Normalize Cloudinary Raw PDF URLs without `.pdf` suffix (iOS treats them as generic data).
-   * No WebView, no fl_attachment — only `Linking.openURL` on the final HTTPS URL.
-   */
-  const buildAdminLicenseOpenUrl = (truck: PendingTruck | null, licenseUrl: string): string => {
-    const path = licenseUrl.split(/[?#]/)[0]?.toLowerCase() ?? "";
-    if (!path.includes("/raw/upload/") || path.endsWith(".pdf")) {
-      return licenseUrl;
-    }
-
-    const lastSeg = path.split("/").filter(Boolean).pop() ?? "";
-    const hasKnownExt = /\.[a-z0-9]{2,12}$/i.test(lastSeg);
-    const fmt = (truck?.license_file_format ?? "").toLowerCase();
-    const isPdf = fmt === "pdf";
-
-    if (isPdf || !hasKnownExt) {
-      return `${licenseUrl}.pdf`;
-    }
-
-    return licenseUrl;
-  };
+  const dashboardStats = useMemo(() => {
+    const approvedCount = statsQuery.data?.approvedTrucks ?? 0;
+    const rejectedCount = statsQuery.data?.rejectedTrucks ?? 0;
+    const withDocuments = pendingItems.filter((truck) => Boolean(truck.document_url)).length;
+    const withLocation = pendingItems.filter((truck) => truck.latitude !== null && truck.longitude !== null).length;
+    const recent = statsQuery.data?.todayRequests ?? 0;
+    return { approvedCount, rejectedCount, withDocuments, withLocation, recent };
+  }, [pendingItems, statsQuery.data]);
 
   const getStatusLabel = (status: string) => {
     if (status === "pending") return "بانتظار المراجعة";
@@ -100,84 +78,6 @@ export const AdminPanelScreen = () => {
     if (canOpen) {
       await Linking.openURL(url);
     }
-  };
-
-  const copyLicenseUrl = async (licenseUrl: string) => {
-    try {
-      await Share.share({
-        title: "رابط ملف الرخصة",
-        message: licenseUrl,
-        ...(Platform.OS === "ios" ? { url: licenseUrl } : {})
-      });
-    } catch {
-      Alert.alert("تعذر فتح مشاركة الرابط، يرجى المحاولة لاحقًا");
-    }
-  };
-
-  const showLicenseOpenFailedAlert = (linkToShare: string) => {
-    Alert.alert(
-      "تعذر فتح ملف الرخصة، يرجى المحاولة لاحقًا",
-      "",
-      [
-        { text: "حسناً", style: "cancel" },
-        {
-          text: "نسخ أو مشاركة الرابط",
-          onPress: () => {
-            void Share.share({
-              title: "رابط ملف الرخصة",
-              message: linkToShare,
-              ...(Platform.OS === "ios" ? { url: linkToShare } : {})
-            }).catch(() => undefined);
-          }
-        }
-      ],
-      { cancelable: true }
-    );
-  };
-
-  const openLicenseDocument = async (truck: PendingTruck | null) => {
-    const licenseUrlUnclean =
-      truck?.license_file_url?.trim() ?? truck?.document_url?.trim() ?? null;
-
-    console.log("ADMIN_LICENSE_DEBUG", {
-      license_file_url: truck?.license_file_url ?? null,
-      license_file_resource_type: truck?.license_file_resource_type ?? null,
-      license_file_format: truck?.license_file_format ?? null,
-      license_file_public_id: truck?.license_file_public_id ?? null
-    });
-
-    if (!licenseUrlUnclean) {
-      Alert.alert("لا يوجد ملف رخصة مرفوع");
-      return;
-    }
-
-    const finalUrl = buildAdminLicenseOpenUrl(truck, licenseUrlUnclean);
-
-    if (!/^https?:\/\//i.test(finalUrl)) {
-      showLicenseOpenFailedAlert(finalUrl);
-      return;
-    }
-
-    Alert.alert("رابط ملف الرخصة (النهائي)", finalUrl, [
-      { text: "إلغاء", style: "cancel" },
-      {
-        text: "فتح الملف",
-        onPress: () => {
-          void (async () => {
-            try {
-              const canOpen = await Linking.canOpenURL(finalUrl);
-              if (!canOpen) {
-                showLicenseOpenFailedAlert(finalUrl);
-                return;
-              }
-              await Linking.openURL(finalUrl);
-            } catch {
-              showLicenseOpenFailedAlert(finalUrl);
-            }
-          })();
-        }
-      }
-    ]);
   };
 
   const openInMaps = async (latitude: number | null, longitude: number | null) => {
@@ -197,7 +97,6 @@ export const AdminPanelScreen = () => {
       setRejectionReason("");
       await queryClient.invalidateQueries({ queryKey: ["admin-pending-trucks"] });
       await queryClient.invalidateQueries({ queryKey: ["admin-dashboard-stats"] });
-      await queryClient.invalidateQueries({ queryKey: ["admin-trucks-by-filter"] });
     }
   });
 
@@ -250,7 +149,7 @@ export const AdminPanelScreen = () => {
               void pendingQuery.refetch();
               void statsQuery.refetch();
             }}
-            tintColor="#FF6B00"
+            tintColor={colors.primary}
           />
         }
       >
@@ -267,33 +166,17 @@ export const AdminPanelScreen = () => {
           <Text style={styles.sectionSub}>ملخص سريع للحالة الحالية بناءً على البيانات المتاحة الآن.</Text>
         </View>
         <View style={styles.statsGrid}>
+          <AdminDashboardStatCard label="طلبات التسجيل المعلقة" value={totalPending} icon="time-outline" tone="warning" />
+          <AdminDashboardStatCard label="التركات المعتمدة (متاح حاليًا)" value={dashboardStats.approvedCount} icon="checkmark-done-outline" tone="primary" />
+          <AdminDashboardStatCard label="التركات المرفوضة (متاح حاليًا)" value={dashboardStats.rejectedCount} icon="close-circle-outline" tone="danger" />
+          <AdminDashboardStatCard label="طلبات وصلت اليوم" value={dashboardStats.recent} icon="sparkles-outline" tone="neutral" />
+          <AdminDashboardStatCard label="طلبات مع وثائق مرفقة" value={dashboardStats.withDocuments} icon="document-text-outline" tone="primary" />
           <AdminDashboardStatCard
-            label="طلبات التسجيل المعلقة"
-            value={totalPending}
-            icon="time-outline"
-            tone="warning"
-            onPress={() => setActiveMetric("pending")}
-          />
-          <AdminDashboardStatCard
-            label="التركات المعتمدة (متاح حاليًا)"
-            value={approvedCount}
-            icon="checkmark-done-outline"
-            tone="primary"
-            onPress={() => setActiveMetric("approved")}
-          />
-          <AdminDashboardStatCard
-            label="التركات المرفوضة (متاح حاليًا)"
-            value={rejectedCount}
-            icon="close-circle-outline"
-            tone="danger"
-            onPress={() => setActiveMetric("rejected")}
-          />
-          <AdminDashboardStatCard
-            label="طلبات وصلت اليوم"
-            value={todayRequests}
-            icon="sparkles-outline"
+            label="طلبات بإحداثيات موقع"
+            value={dashboardStats.withLocation}
+            icon="navigate-outline"
             tone="neutral"
-            onPress={() => setActiveMetric("today")}
+            helper="يساعدك على سرعة التحقق من موقع الترك"
           />
         </View>
 
@@ -307,7 +190,7 @@ export const AdminPanelScreen = () => {
             description="فتح قائمة الطلبات المعلقة واعتمادها أو رفضها."
             icon="clipboard-outline"
             badge={`${totalPending} طلب`}
-            onPress={() => setActiveMetric("pending")}
+            onPress={() => scrollRef.current?.scrollTo({ y: 780, animated: true })}
           />
           <AdminQuickActionCard
             title="إدارة التراخيص"
@@ -347,13 +230,12 @@ export const AdminPanelScreen = () => {
         </View>
 
         {pendingItems.length === 0 ? (
-          <View style={styles.adminEmptyCard}>
-            <View style={styles.adminEmptyIcon}>
-              <Ionicons name="checkmark-circle-outline" size={28} color={ADMIN.orange} />
-            </View>
-            <Text style={styles.adminEmptyTitle}>لا توجد طلبات معلقة حاليًا</Text>
-            <Text style={styles.adminEmptyDesc}>عمل رائع. عند وصول طلبات جديدة ستظهر هنا مباشرة.</Text>
-          </View>
+          <EmptyState
+            variant="card"
+            icon="checkmark-circle-outline"
+            title="لا توجد طلبات معلقة حاليًا"
+            description="عمل رائع. عند وصول طلبات جديدة ستظهر هنا مباشرة."
+          />
         ) : null}
 
         {pendingItems.map((truck) => (
@@ -365,8 +247,8 @@ export const AdminPanelScreen = () => {
                 </Text>
                 <Text style={styles.requestMeta}>رقم الرخصة: {truck.license_number}</Text>
               </View>
-              <Pressable style={styles.detailsButton} onPress={() => setSelectedTruck(truck)}>
-                <Ionicons name="information-circle-outline" size={20} color={ADMIN.orange} />
+              <Pressable style={styles.detailsButton} onPress={() => setSelectedTruckId(truck.id)}>
+                <Ionicons name="information-circle-outline" size={20} color={colors.primaryDark} />
               </Pressable>
             </View>
             <Text style={styles.requestState}>الحالة: {getStatusLabel(truck.approval_status)}</Text>
@@ -439,30 +321,13 @@ export const AdminPanelScreen = () => {
         </View>
       </Modal>
 
-      <AdminMetricListModal
-        visible={activeMetric !== null}
-        filter={activeMetric}
-        accessToken={accessToken}
-        onClose={() => setActiveMetric(null)}
-        onOpenDetails={(truck) => {
-          setActiveMetric(null);
-          setSelectedTruck(truck);
-        }}
-        onApprove={(truckId) => reviewMutation.mutate({ truckId, decision: "approved" })}
-        onReject={(truckId) => {
-          setActiveMetric(null);
-          setRejectingTruckId(truckId);
-          setRejectionReason("");
-        }}
-      />
-
-      <Modal visible={Boolean(selectedTruck)} transparent animationType="slide" onRequestClose={() => setSelectedTruck(null)}>
+      <Modal visible={Boolean(selectedTruck)} transparent animationType="slide" onRequestClose={() => setSelectedTruckId(null)}>
         <View style={styles.modalBackdrop}>
-          <Pressable style={styles.modalDismissArea} onPress={() => setSelectedTruck(null)} />
+          <Pressable style={styles.modalDismissArea} onPress={() => setSelectedTruckId(null)} />
           <View style={styles.detailsModalCard}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>تفاصيل طلب التسجيل</Text>
-              <Pressable onPress={() => setSelectedTruck(null)}>
+              <Pressable onPress={() => setSelectedTruckId(null)}>
                 <Ionicons name="close" size={20} color={colors.text} />
               </Pressable>
             </View>
@@ -476,7 +341,7 @@ export const AdminPanelScreen = () => {
                     </Pressable>
                   ) : (
                     <View style={styles.emptyImage}>
-                      <Ionicons name="image-outline" size={24} color={ADMIN.muted} />
+                      <Ionicons name="image-outline" size={24} color="#8EA6CC" />
                       <Text style={styles.emptyImageText}>لا توجد صورة مرفقة</Text>
                     </View>
                   )}
@@ -522,7 +387,7 @@ export const AdminPanelScreen = () => {
                         <Marker coordinate={{ latitude: selectedTruck.latitude, longitude: selectedTruck.longitude }} />
                       </MapView>
                       <Pressable style={styles.linkButton} onPress={() => openInMaps(selectedTruck.latitude, selectedTruck.longitude)}>
-                        <Ionicons name="map-outline" size={16} color={ADMIN.orange} />
+                        <Ionicons name="map-outline" size={16} color={colors.primaryDark} />
                         <Text style={styles.linkButtonText}>فتح الموقع في الخرائط</Text>
                       </Pressable>
                     </>
@@ -532,21 +397,15 @@ export const AdminPanelScreen = () => {
                 <View style={styles.sectionCard}>
                   <Text style={styles.detailSectionTitle}>بيانات الرخصة</Text>
                   <Text style={styles.detailLine}>رقم الرخصة: {selectedTruck.license_number}</Text>
-                  <Text style={styles.detailLine}>انتهاء الرخصة: {formatLicenseExpiryForAdmin(selectedTruck.expires_at)}</Text>
-                  {selectedLicenseFileUrl ? (
-                    <View style={styles.licenseButtonsRow}>
-                      <Pressable style={[styles.linkButton, styles.licenseButton]} onPress={() => void openLicenseDocument(selectedTruck)}>
-                        <Ionicons name="document-outline" size={16} color={ADMIN.orange} />
-                        <Text style={styles.linkButtonText}>فتح الرابط</Text>
-                      </Pressable>
-                      <Pressable style={[styles.linkButton, styles.licenseButton]} onPress={() => void copyLicenseUrl(selectedLicenseFileUrl)}>
-                        <Ionicons name="copy-outline" size={16} color={ADMIN.orange} />
-                        <Text style={styles.linkButtonText}>نسخ الرابط</Text>
-                      </Pressable>
-                    </View>
-                  ) : (
-                    <Text style={styles.detailMutedLine}>لا يوجد ملف رخصة مرفوع</Text>
-                  )}
+                  <Text style={styles.detailLine}>انتهاء الرخصة: {selectedTruck.expires_at ?? "-"}</Text>
+                  <Pressable
+                    style={[styles.linkButton, !selectedTruck.document_url && styles.linkButtonDisabled]}
+                    onPress={() => openExternalLink(selectedTruck.document_url)}
+                    disabled={!selectedTruck.document_url}
+                  >
+                    <Ionicons name="document-outline" size={16} color={colors.primaryDark} />
+                    <Text style={styles.linkButtonText}>فتح ملف الرخصة</Text>
+                  </Pressable>
                 </View>
 
                 <View style={styles.sectionCard}>
@@ -577,55 +436,40 @@ export const AdminPanelScreen = () => {
   );
 };
 
-const ADMIN = {
-  orange: "#FF6B00",
-  orangeLight: "#FFF3EA",
-  text: "#0F1B35",
-  muted: "#64748B",
-  border: "#E5EEF7",
-  bg: "#F7FAFD",
-  white: "#FFFFFF"
-} as const;
-
 const styles = StyleSheet.create({
   pad: {
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.md,
-    paddingBottom: 120,
-    backgroundColor: ADMIN.bg
+    paddingBottom: 120
   },
   scrollContent: {
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.md,
-    paddingBottom: 120,
-    backgroundColor: ADMIN.bg
+    paddingBottom: 120
   },
   heroCard: {
     borderRadius: radius.lg,
     borderWidth: 1,
-    borderColor: ADMIN.border,
-    backgroundColor: ADMIN.orangeLight,
+    borderColor: colors.borderStrong,
+    backgroundColor: colors.section,
     padding: spacing.lg,
     marginBottom: spacing.lg,
     ...shadows.soft
   },
   heroEyebrow: {
-    color: ADMIN.orange,
+    color: colors.primaryDark,
     fontWeight: "800",
-    fontSize: typography.caption,
-    textAlign: "right",
-    writingDirection: "rtl"
+    fontSize: typography.caption
   },
   pageTitle: {
-    color: ADMIN.text,
+    color: colors.brandBlue,
+    letterSpacing: 0.2,
     fontSize: typography.h1,
-    fontWeight: "800",
-    textAlign: "right",
-    writingDirection: "rtl"
+    fontWeight: "800"
   },
   pageSub: {
     marginTop: spacing.xs,
-    color: ADMIN.muted,
+    color: colors.textSecondary,
     lineHeight: 22,
     fontSize: typography.bodySm,
     textAlign: "right",
@@ -633,25 +477,21 @@ const styles = StyleSheet.create({
   },
   sectionHeader: {
     marginBottom: spacing.sm,
-    marginTop: spacing.md,
-    alignItems: "flex-end"
+    marginTop: spacing.md
   },
   sectionTitle: {
-    color: ADMIN.text,
+    color: colors.text,
     fontSize: typography.h2,
     fontWeight: "800",
-    textAlign: "right",
-    writingDirection: "rtl",
-    alignSelf: "stretch"
+    textAlign: "right"
   },
   sectionSub: {
     marginTop: 4,
-    color: ADMIN.muted,
+    color: colors.textMuted,
     fontSize: typography.caption,
     lineHeight: 19,
     textAlign: "right",
-    writingDirection: "rtl",
-    alignSelf: "stretch"
+    writingDirection: "rtl"
   },
   statsGrid: {
     flexDirection: "row",
@@ -665,98 +505,55 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     rowGap: spacing.sm
   },
-  adminEmptyCard: {
-    alignItems: "center",
-    paddingVertical: spacing.xl,
-    paddingHorizontal: spacing.lg,
-    gap: spacing.sm,
-    backgroundColor: ADMIN.white,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: ADMIN.border,
-    marginBottom: spacing.sm,
-    ...shadows.soft
-  },
-  adminEmptyIcon: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    borderWidth: 1,
-    borderColor: "rgba(255, 107, 0, 0.22)",
-    backgroundColor: ADMIN.orangeLight,
-    alignItems: "center",
-    justifyContent: "center"
-  },
-  adminEmptyTitle: {
-    color: ADMIN.text,
-    fontSize: typography.h3,
-    fontWeight: "800",
-    textAlign: "center",
-    writingDirection: "rtl"
-  },
-  adminEmptyDesc: {
-    color: ADMIN.muted,
-    fontSize: typography.bodySm,
-    lineHeight: 22,
-    textAlign: "center",
-    writingDirection: "rtl"
-  },
   requestCard: {
     borderRadius: radius.lg,
     borderWidth: 1,
-    borderColor: ADMIN.border,
-    backgroundColor: ADMIN.white,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
     padding: spacing.md,
     marginBottom: spacing.sm,
     gap: spacing.sm,
     ...shadows.soft
   },
   requestHeader: {
-    flexDirection: "row-reverse",
+    flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
     gap: spacing.sm
   },
   requestTitleWrap: {
-    flex: 1,
-    alignItems: "flex-end"
+    flex: 1
   },
   requestTitle: {
-    color: ADMIN.text,
+    color: colors.text,
     fontWeight: "800",
     fontSize: typography.h3,
-    textAlign: "right",
-    writingDirection: "rtl",
-    alignSelf: "stretch"
+    textAlign: "right"
   },
   requestMeta: {
-    color: ADMIN.muted,
+    color: colors.textSecondary,
     marginTop: 4,
     fontSize: typography.caption,
-    textAlign: "right",
-    writingDirection: "rtl",
-    alignSelf: "stretch"
+    textAlign: "right"
   },
   requestState: {
-    color: ADMIN.muted,
+    color: colors.textMuted,
     fontSize: typography.caption,
     fontWeight: "700",
-    textAlign: "right",
-    writingDirection: "rtl",
-    alignSelf: "stretch"
+    textAlign: "right"
   },
   detailsButton: {
     width: 34,
     height: 34,
     borderRadius: 17,
     borderWidth: 1,
-    borderColor: "rgba(255, 107, 0, 0.22)",
-    backgroundColor: ADMIN.orangeLight,
+    borderColor: colors.borderStrong,
+    backgroundColor: colors.primaryMuted,
     alignItems: "center",
     justifyContent: "center"
   },
   row: {
-    flexDirection: "row-reverse",
+    flexDirection: "row",
     gap: spacing.xs
   },
   flexOne: {
@@ -772,8 +569,8 @@ const styles = StyleSheet.create({
     padding: spacing.lg,
     borderRadius: radius.lg,
     borderWidth: 1,
-    borderColor: ADMIN.border,
-    backgroundColor: ADMIN.white,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
     gap: spacing.md,
     ...shadows.soft
   },
@@ -805,18 +602,15 @@ const styles = StyleSheet.create({
     gap: spacing.sm
   },
   modalHeader: {
-    flexDirection: "row-reverse",
+    flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
     marginBottom: spacing.sm
   },
   modalTitle: {
-    color: ADMIN.text,
+    color: colors.text,
     fontWeight: "800",
-    fontSize: typography.h2,
-    textAlign: "right",
-    writingDirection: "rtl",
-    flex: 1
+    fontSize: typography.h2
   },
   detailsScroll: {
     maxHeight: "100%"
@@ -828,17 +622,15 @@ const styles = StyleSheet.create({
   sectionCard: {
     borderRadius: radius.md,
     borderWidth: 1,
-    borderColor: ADMIN.border,
-    backgroundColor: ADMIN.bg,
+    borderColor: colors.border,
+    backgroundColor: colors.surface2,
     padding: spacing.sm,
     gap: 6
   },
   detailSectionTitle: {
-    color: ADMIN.text,
+    color: colors.text,
     fontWeight: "800",
-    textAlign: "right",
-    writingDirection: "rtl",
-    alignSelf: "stretch"
+    textAlign: "right"
   },
   coverImage: {
     width: "100%",
@@ -849,17 +641,15 @@ const styles = StyleSheet.create({
     borderRadius: radius.sm,
     borderWidth: 1,
     borderStyle: "dashed",
-    borderColor: ADMIN.border,
-    backgroundColor: ADMIN.orangeLight,
+    borderColor: colors.borderStrong,
+    backgroundColor: colors.section,
     height: 110,
     alignItems: "center",
     justifyContent: "center",
     gap: 6
   },
   emptyImageText: {
-    color: ADMIN.muted,
-    textAlign: "right",
-    writingDirection: "rtl"
+    color: colors.textMuted
   },
   mapPreview: {
     width: "100%",
@@ -868,64 +658,41 @@ const styles = StyleSheet.create({
     marginTop: 4
   },
   detailLine: {
-    color: ADMIN.muted,
+    color: colors.textSecondary,
     textAlign: "right",
-    writingDirection: "rtl",
-    alignSelf: "stretch",
-    lineHeight: 21
-  },
-  detailMutedLine: {
-    color: ADMIN.muted,
-    textAlign: "right",
-    writingDirection: "rtl",
-    alignSelf: "stretch",
-    fontSize: typography.caption
+    writingDirection: "rtl"
   },
   linkButton: {
     marginTop: 4,
     borderRadius: radius.md,
     borderWidth: 1,
-    borderColor: "rgba(255, 107, 0, 0.22)",
-    backgroundColor: ADMIN.orangeLight,
+    borderColor: colors.borderStrong,
+    backgroundColor: colors.section,
     paddingVertical: 9,
     paddingHorizontal: 10,
-    flexDirection: "row-reverse",
+    flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 8
   },
-  licenseButtonsRow: {
-    flexDirection: "row-reverse",
-    gap: spacing.xs
-  },
-  licenseButton: {
-    flex: 1
-  },
   linkButtonDisabled: {
-    borderColor: ADMIN.border,
-    backgroundColor: ADMIN.bg
+    borderColor: colors.border,
+    backgroundColor: colors.surface2
   },
   linkButtonText: {
-    color: ADMIN.orange,
-    fontWeight: "700",
-    textAlign: "right",
-    writingDirection: "rtl"
+    color: colors.primaryDark,
+    fontWeight: "700"
   },
   rejectKeyboardAvoid: {
     width: "100%"
   },
   rejectModalTitle: {
-    color: ADMIN.text,
+    color: colors.text,
     fontWeight: "800",
-    fontSize: typography.h3,
-    textAlign: "right",
-    writingDirection: "rtl"
+    fontSize: typography.h3
   },
   rejectModalSubtitle: {
-    color: ADMIN.muted,
-    textAlign: "right",
-    writingDirection: "rtl",
-    lineHeight: 21
+    color: colors.textSecondary
   },
   rejectInput: {
     minHeight: 95,
@@ -959,17 +726,15 @@ const styles = StyleSheet.create({
     maxHeight: "90%"
   },
   imagePreviewHeader: {
-    flexDirection: "row-reverse",
+    flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     marginBottom: 8
   },
   imagePreviewTitle: {
-    color: ADMIN.text,
+    color: colors.text,
     fontWeight: "800",
-    fontSize: typography.body,
-    textAlign: "right",
-    writingDirection: "rtl"
+    fontSize: typography.body
   },
   imagePreview: {
     width: "100%",

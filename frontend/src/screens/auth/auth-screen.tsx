@@ -18,7 +18,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute, type RouteProp } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 
-import { isEmailVerificationRequired, login, register } from "@/features/auth/api";
+import { login, register } from "@/features/auth/api";
 import { useAuthStore } from "@/store/auth-store";
 import { AppButton } from "@/ui";
 import { getReadableNetworkError } from "@/api/network-error";
@@ -110,19 +110,7 @@ export const AuthScreen = () => {
       setFieldErrors({});
       continueAfterAuth();
     },
-    onError: (error) => {
-      if (isEmailVerificationRequired(error)) {
-        setFormError("");
-        setFieldErrors({});
-        navigation.navigate("VerifyEmail", {
-          email: email.trim().toLowerCase(),
-          password,
-          redirectTo
-        });
-        return;
-      }
-      setFormError(getReadableNetworkError(error));
-    }
+    onError: (error) => setFormError(getReadableNetworkError(error))
   });
 
   const registerMutation = useMutation({
@@ -134,16 +122,10 @@ export const AuthScreen = () => {
         password,
         roleCode: role
       }),
-    onSuccess: (result) => {
+    onSuccess: async () => {
+      await loginMutation.mutateAsync();
       setFormError("");
       setFieldErrors({});
-      if (result.requiresVerification) {
-        navigation.navigate("VerifyEmail", {
-          email: email.trim().toLowerCase(),
-          password,
-          redirectTo
-        });
-      }
     },
     onError: (error) => setFormError(getReadableNetworkError(error))
   });

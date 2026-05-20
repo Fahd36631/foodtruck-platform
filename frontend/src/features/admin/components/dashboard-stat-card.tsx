@@ -1,20 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
 
-import { iconSize, radius, shadows, spacing, typography } from "@/theme/tokens";
-
-const ADMIN = {
-  orange: "#FF6B00",
-  orangeLight: "#FFF3EA",
-  text: "#0F1B35",
-  muted: "#64748B",
-  border: "#E5EEF7",
-  white: "#FFFFFF",
-  danger: "#E63946",
-  dangerLight: "rgba(230, 57, 70, 0.12)",
-  warning: "#8A5A00",
-  warningLight: "rgba(255, 183, 3, 0.22)"
-} as const;
+import { colors, iconSize, radius, shadows, spacing, typography } from "@/theme/tokens";
 
 type DashboardStatCardProps = {
   label: string;
@@ -22,62 +9,42 @@ type DashboardStatCardProps = {
   icon: keyof typeof Ionicons.glyphMap;
   tone?: "primary" | "warning" | "danger" | "neutral";
   helper?: string;
-  onPress?: () => void;
 };
 
 const toneByType = {
   primary: {
-    bg: ADMIN.orangeLight,
-    border: "rgba(255, 107, 0, 0.28)",
-    icon: ADMIN.orange
+    bg: colors.primaryMuted,
+    border: colors.borderStrong,
+    icon: colors.primary
   },
   warning: {
-    bg: ADMIN.warningLight,
+    bg: colors.warningMuted,
     border: "rgba(255, 183, 3, 0.45)",
-    icon: ADMIN.warning
+    icon: "#8A5A00"
   },
   danger: {
-    bg: ADMIN.dangerLight,
+    bg: colors.dangerMuted,
     border: "rgba(230, 57, 70, 0.35)",
-    icon: ADMIN.danger
+    icon: colors.danger
   },
   neutral: {
-    bg: ADMIN.orangeLight,
-    border: ADMIN.border,
-    icon: ADMIN.orange
+    bg: colors.brandBlueSoft,
+    border: "rgba(21, 58, 138, 0.25)",
+    icon: colors.brandBlue
   }
 } as const;
 
-export const DashboardStatCard = ({ label, value, icon, tone = "neutral", helper, onPress }: DashboardStatCardProps) => {
+export const DashboardStatCard = ({ label, value, icon, tone = "neutral", helper }: DashboardStatCardProps) => {
   const palette = toneByType[tone];
-  const content = (
-    <>
-      <View style={styles.headerRow}>
-        <View style={[styles.iconWrap, { backgroundColor: palette.bg, borderColor: palette.border }]}>
-          <Ionicons name={icon} size={iconSize.md} color={palette.icon} />
-        </View>
-        {onPress ? <Ionicons name="chevron-back" size={14} color={ADMIN.muted} style={styles.chevron} /> : null}
+  return (
+    <View style={styles.card}>
+      <View style={[styles.iconWrap, { backgroundColor: palette.bg, borderColor: palette.border }]}>
+        <Ionicons name={icon} size={iconSize.md} color={palette.icon} />
       </View>
       <Text style={styles.value}>{value.toLocaleString("ar-SA")}</Text>
-      <Text style={styles.label} numberOfLines={2}>
-        {label}
-      </Text>
-      {helper ? (
-        <Text style={styles.helper} numberOfLines={2}>
-          {helper}
-        </Text>
-      ) : null}
-    </>
-  );
-
-  if (!onPress) {
-    return <View style={styles.card}>{content}</View>;
-  }
-
-  return (
-    <Pressable onPress={onPress} style={({ pressed }) => [styles.card, pressed && styles.cardPressed]}>
-      {content}
-    </Pressable>
+      <Text style={styles.label}>{label}</Text>
+      {helper ? <Text style={styles.helper}>{helper}</Text> : null}
+    </View>
   );
 };
 
@@ -86,55 +53,39 @@ const styles = StyleSheet.create({
     width: "48.5%",
     borderRadius: radius.lg,
     borderWidth: 1,
-    borderColor: ADMIN.border,
-    backgroundColor: ADMIN.white,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
     padding: spacing.md,
     gap: spacing.xs,
     ...shadows.soft
   },
-  cardPressed: {
-    opacity: 0.92,
-    transform: [{ scale: 0.99 }]
-  },
-  headerRow: {
-    flexDirection: "row-reverse",
-    alignItems: "center",
-    justifyContent: "space-between"
-  },
-  chevron: {
-    marginTop: 2
-  },
   iconWrap: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
     borderWidth: 1,
     alignItems: "center",
     justifyContent: "center"
   },
   value: {
-    color: ADMIN.orange,
+    color: colors.brandBlue,
     fontSize: typography.h1,
     fontWeight: "800",
     textAlign: "right",
-    writingDirection: "rtl",
-    alignSelf: "stretch"
+    letterSpacing: 0.3
   },
   label: {
-    color: ADMIN.text,
-    fontSize: typography.bodySm,
+    color: colors.textSecondary,
+    fontSize: typography.caption,
     fontWeight: "700",
-    lineHeight: 20,
+    lineHeight: 18,
     textAlign: "right",
-    writingDirection: "rtl",
-    alignSelf: "stretch"
+    writingDirection: "rtl"
   },
   helper: {
-    color: ADMIN.muted,
+    color: colors.textMuted,
     fontSize: typography.micro,
-    lineHeight: 17,
     textAlign: "right",
-    writingDirection: "rtl",
-    alignSelf: "stretch"
+    writingDirection: "rtl"
   }
 });

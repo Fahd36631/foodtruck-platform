@@ -1,16 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
-import { iconSize, radius, shadows, spacing, typography } from "@/theme/tokens";
-
-const ADMIN = {
-  orange: "#FF6B00",
-  orangeLight: "#FFF3EA",
-  text: "#0F1B35",
-  muted: "#64748B",
-  border: "#E5EEF7",
-  white: "#FFFFFF"
-} as const;
+import { colors, iconSize, radius, shadows, spacing, typography } from "@/theme/tokens";
 
 type QuickActionCardProps = {
   title: string;
@@ -35,23 +26,19 @@ export const QuickActionCard = ({
         <View style={[styles.card, pressed && !disabled && styles.pressed, disabled && styles.disabled]}>
           <View style={styles.topRow}>
             <View style={styles.iconWrap}>
-              <Ionicons name={icon} size={iconSize.md} color={disabled ? ADMIN.muted : ADMIN.orange} />
+              <Ionicons name={icon} size={iconSize.md} color={colors.brandBlue} />
             </View>
             {badge ? (
-              <View style={[styles.badge, disabled && styles.badgeMuted]}>
-                <Text style={[styles.badgeText, disabled && styles.badgeTextMuted]}>{badge}</Text>
+              <View style={styles.badge}>
+                <Text style={styles.badgeText}>{badge}</Text>
               </View>
             ) : null}
           </View>
-          <Text style={styles.title} numberOfLines={2}>
-            {title}
-          </Text>
-          <Text style={styles.description} numberOfLines={3}>
-            {description}
-          </Text>
+          <Text style={styles.title}>{title}</Text>
+          <Text style={styles.description}>{description}</Text>
           <View style={styles.ctaRow}>
-            <Text style={[styles.ctaText, disabled && styles.ctaTextMuted]}>{disabled ? "قريبًا" : "فتح القسم"}</Text>
-            <Ionicons name="chevron-back" size={16} color={disabled ? ADMIN.muted : ADMIN.orange} />
+            <Text style={styles.ctaText}>{disabled ? "قريبًا" : "فتح القسم"}</Text>
+            <Ionicons name="arrow-back-outline" size={16} color={colors.primary} />
           </View>
         </View>
       )}
@@ -66,31 +53,31 @@ const styles = StyleSheet.create({
   card: {
     borderRadius: radius.lg,
     borderWidth: 1,
-    borderColor: ADMIN.border,
-    backgroundColor: ADMIN.white,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
     padding: spacing.md,
     gap: spacing.xs,
-    minHeight: 148,
+    minHeight: 142,
     ...shadows.soft
   },
   pressed: {
     transform: [{ scale: 0.995 }]
   },
   disabled: {
-    opacity: 0.78
+    opacity: 0.72
   },
   topRow: {
-    flexDirection: "row-reverse",
+    flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between"
   },
   iconWrap: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     borderWidth: 1,
-    borderColor: "rgba(255, 107, 0, 0.22)",
-    backgroundColor: ADMIN.orangeLight,
+    borderColor: "rgba(21, 58, 138, 0.25)",
+    backgroundColor: colors.brandBlueSoft,
     alignItems: "center",
     justifyContent: "center"
   },
@@ -99,55 +86,38 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderWidth: 1,
-    borderColor: "rgba(255, 107, 0, 0.25)",
-    backgroundColor: ADMIN.orangeLight
-  },
-  badgeMuted: {
-    borderColor: ADMIN.border,
-    backgroundColor: "#F1F5F9"
+    borderColor: colors.border,
+    backgroundColor: colors.section
   },
   badgeText: {
-    color: ADMIN.orange,
+    color: colors.textMuted,
     fontSize: typography.micro,
-    fontWeight: "700",
+    fontWeight: "700"
+  },
+  title: {
+    color: colors.text,
+    fontSize: typography.body,
+    fontWeight: "800",
     textAlign: "right",
     writingDirection: "rtl"
   },
-  badgeTextMuted: {
-    color: ADMIN.muted
-  },
-  title: {
-    color: ADMIN.text,
-    fontSize: typography.body,
-    fontWeight: "800",
-    lineHeight: 22,
-    textAlign: "right",
-    writingDirection: "rtl",
-    alignSelf: "stretch"
-  },
   description: {
-    color: ADMIN.muted,
+    color: colors.textSecondary,
     fontSize: typography.caption,
-    lineHeight: 19,
+    lineHeight: 18,
     textAlign: "right",
-    writingDirection: "rtl",
-    alignSelf: "stretch"
+    writingDirection: "rtl"
   },
   ctaRow: {
     marginTop: "auto",
-    flexDirection: "row-reverse",
+    flexDirection: "row",
     alignItems: "center",
-    justifyContent: "flex-start",
+    justifyContent: "flex-end",
     gap: spacing.xs
   },
   ctaText: {
-    color: ADMIN.orange,
+    color: colors.primary,
     fontSize: typography.caption,
-    fontWeight: "800",
-    textAlign: "right",
-    writingDirection: "rtl"
-  },
-  ctaTextMuted: {
-    color: ADMIN.muted
+    fontWeight: "800"
   }
 });

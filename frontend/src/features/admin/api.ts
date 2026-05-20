@@ -20,10 +20,6 @@ export type PendingTruck = {
   longitude: number | null;
   license_number: string;
   document_url: string | null;
-  license_file_url?: string | null;
-  license_file_resource_type?: "raw" | "image" | "video" | null;
-  license_file_format?: string | null;
-  license_file_public_id?: string | null;
   expires_at: string | null;
   review_status: string;
 };
@@ -35,8 +31,6 @@ export type AdminStats = {
   todayRequests: number;
 };
 
-export type AdminTruckListFilter = "pending" | "approved" | "rejected" | "today";
-
 export const getPendingTrucks = async (accessToken: string) => {
   const response = await apiClient.get<ApiEnvelope<{ items: PendingTruck[] }>>("/trucks/admin/pending", {
     headers: { Authorization: `Bearer ${accessToken}` }
@@ -45,18 +39,10 @@ export const getPendingTrucks = async (accessToken: string) => {
 };
 
 export const getAdminStats = async (accessToken: string) => {
-  const response = await apiClient.get<ApiEnvelope<AdminStats>>("/trucks/admin/stats", {
+  const response = await apiClient.get<ApiEnvelope<AdminStats>>("/admin/stats", {
     headers: { Authorization: `Bearer ${accessToken}` }
   });
   return response.data.data;
-};
-
-export const getAdminTrucksByFilter = async (accessToken: string, filter: AdminTruckListFilter) => {
-  const response = await apiClient.get<ApiEnvelope<{ items: PendingTruck[] }>>("/trucks/admin/trucks", {
-    headers: { Authorization: `Bearer ${accessToken}` },
-    params: { filter }
-  });
-  return response.data.data.items;
 };
 
 export const reviewTruck = async (

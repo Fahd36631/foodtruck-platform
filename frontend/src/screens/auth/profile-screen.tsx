@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Image, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useNavigation } from "@react-navigation/native";
@@ -7,9 +7,7 @@ import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useMutation, useQuery } from "@tanstack/react-query";
 
 import { AppButton, AppContainer } from "@/ui";
-import { AdminAccountScreen } from "@/screens/auth/admin-account-screen";
-import { CustomerAccountScreen } from "@/screens/auth/customer-account-screen";
-import { OwnerAccountScreen } from "@/screens/auth/owner-account-screen";
+import { createAdminAccount } from "@/features/admin/api";
 import { changeMyPassword, updateMyProfile } from "@/features/auth/api";
 import { getMyOwnerTruckDraft } from "@/features/trucks/api";
 import type { RootStackParamList } from "@/navigation/root-stack";
@@ -29,6 +27,10 @@ export const ProfileScreen = () => {
   const [phone, setPhone] = useState(user?.phone ?? "");
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
+  const [adminFullName, setAdminFullName] = useState("");
+  const [adminEmail, setAdminEmail] = useState("");
+  const [adminPhone, setAdminPhone] = useState("");
+  const [adminPassword, setAdminPassword] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
 
   const isAuthenticated = !!accessToken && !!user;
@@ -123,7 +125,30 @@ export const ProfileScreen = () => {
     }
   });
 
-  const isBusy = updateProfileMutation.isPending || changePasswordMutation.isPending;
+  const createAdminMutation = useMutation({
+    mutationFn: () =>
+      createAdminAccount(
+        {
+          fullName: adminFullName.trim(),
+          email: adminEmail.trim(),
+          phone: adminPhone.trim(),
+          password: adminPassword
+        },
+        accessToken
+      ),
+    onSuccess: () => {
+      setAdminFullName("");
+      setAdminEmail("");
+      setAdminPhone("");
+      setAdminPassword("");
+      setErrorMessage("");
+    },
+    onError: (error) => {
+      setErrorMessage(getReadableNetworkError(error));
+    }
+  });
+
+  const isBusy = updateProfileMutation.isPending || changePasswordMutation.isPending || createAdminMutation.isPending;
 
   const roleMeta = isAdmin
     ? { label: "مدير النظام", icon: "shield-checkmark" as const }
@@ -133,37 +158,23 @@ export const ProfileScreen = () => {
         ? { label: "عميل", icon: "person" as const }
         : null;
 
-  if (isCustomer && user) {
-    return <CustomerAccountScreen />;
-  }
-
-  if (isAdmin && user) {
-    return <AdminAccountScreen />;
-  }
-
-  if (isTruckOwner && user) {
-    return <OwnerAccountScreen />;
-  }
-
-  if (!user) {
-    return (
-      <GuestProfileWelcome
-        onLogin={() => navigation.navigate("Auth", { initialMode: "login" })}
-        onRegister={() => navigation.navigate("Auth", { initialMode: "register" })}
-      />
-    );
-  }
-
   return (
     <AppContainer edges={["top"]}>
       <ScrollView style={styles.flex} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <ProfileHero
-          name={user.fullName}
-          subtitle={user.email}
-          phone={user.phone}
+          name={user?.fullName ?? "أهلاً بك 👋"}
+          subtitle={user?.email ?? "اكتشف أفضل عربات الطعام حولك"}
+          phone={user?.phone}
           roleMeta={roleMeta}
-          isGuest={false}
+          isGuest={!user}
         />
+
+        {!user ? (
+          <GuestAuthCard
+            onLogin={() => navigation.navigate("Auth", { initialMode: "login" })}
+            onRegister={() => navigation.navigate("Auth", { initialMode: "register" })}
+          />
+        ) : null}
 
         {isTruckOwner ? (
           <SectionCard icon="storefront-outline" title="بيانات الترك">
@@ -299,6 +310,64 @@ export const ProfileScreen = () => {
               />
             </SectionCard>
 
+            {isAdmin ? (
+              <SectionCard icon="shield-checkmark-outline" title="إضافة حساب أدمن">
+                <FormField label="الاسم الكامل" icon="person-outline">
+                  <TextInput
+                    style={styles.input}
+                    placeholder="اسم الأدمن الجديد"
+                    placeholderTextColor={colors.textMuted}
+                    value={adminFullName}
+                    onChangeText={setAdminFullName}
+                  />
+                </FormField>
+                <FormField label="البريد الإلكتروني" icon="mail-outline">
+                  <TextInput
+                    style={styles.input}
+                    placeholder="admin@mail.com"
+                    placeholderTextColor={colors.textMuted}
+                    value={adminEmail}
+                    onChangeText={setAdminEmail}
+                    autoCapitalize="none"
+                    keyboardType="email-address"
+                  />
+                </FormField>
+                <FormField label="رقم الجوال" icon="call-outline">
+                  <TextInput
+                    style={styles.input}
+                    placeholder="+9665xxxxxxxx"
+                    placeholderTextColor={colors.textMuted}
+                    value={adminPhone}
+                    onChangeText={setAdminPhone}
+                    keyboardType="phone-pad"
+                  />
+                </FormField>
+                <FormField label="كلمة المرور" icon="lock-closed-outline">
+                  <TextInput
+                    style={styles.input}
+                    placeholder="••••••••"
+                    placeholderTextColor={colors.textMuted}
+                    value={adminPassword}
+                    onChangeText={setAdminPassword}
+                    secureTextEntry
+                  />
+                </FormField>
+                <AppButton
+                  label="إنشاء حساب أدمن"
+                  icon="add-outline"
+                  variant="primary"
+                  onPress={() => {
+                    setErrorMessage("");
+                    createAdminMutation.mutate();
+                  }}
+                  disabled={
+                    isBusy || !adminFullName.trim() || !adminEmail.trim() || !adminPhone.trim() || !adminPassword
+                  }
+                  loading={createAdminMutation.isPending}
+                  fullWidth
+                />
+              </SectionCard>
+            ) : null}
           </>
         ) : null}
 
@@ -451,248 +520,113 @@ const hero = StyleSheet.create({
 });
 
 // ============================================================
-// Guest welcome (not logged in)
+// Guest Auth Card
 // ============================================================
 
-const GUEST_TRUCK_IMAGE = require("../../assets/images/backg2.png");
+const AUTH_PERKS = [
+  { icon: "time-outline" as const, text: "تتبّع طلباتك لحظة بلحظة" },
+  { icon: "heart-outline" as const, text: "احفظ تركاتك المفضّلة" },
+  { icon: "star-outline" as const, text: "قيّم تجربتك بعد الاستلام" }
+];
 
-const GUEST_PERKS = [
-  { icon: "time-outline" as const, text: "تتبع طلباتك لحظة بلحظة" },
-  { icon: "heart-outline" as const, text: "احفظ تركاتك المفضلة" },
-  { icon: "star-outline" as const, text: "قيم تجربتك بعد الاستلام" }
-] as const;
-
-const GuestProfileWelcome = ({ onLogin, onRegister }: { onLogin: () => void; onRegister: () => void }) => (
-  <AppContainer edges={["top"]}>
-    <ScrollView style={guestStyles.screen} contentContainerStyle={guestStyles.content} showsVerticalScrollIndicator={false}>
-      <View style={guestStyles.heroSection}>
-        <View style={guestStyles.heroVisual} pointerEvents="none">
-          <View style={guestStyles.heroBlobPrimary} />
-          <View style={guestStyles.heroBlobSecondary} />
-          <Image source={GUEST_TRUCK_IMAGE} style={guestStyles.heroImage} resizeMode="contain" />
-        </View>
-        <View style={guestStyles.welcomeText}>
-          <Text style={guestStyles.welcomeLine}>مرحبًا بك في</Text>
-          <Text style={guestStyles.brandLine}>عالم التركات</Text>
-          <View style={guestStyles.brandUnderline} />
-          <Text style={guestStyles.welcomeDesc}>اكتشف ألذ الأكل من</Text>
-          <Text style={guestStyles.welcomeDescSecond}>التركات القريبة منك</Text>
-        </View>
+const GuestAuthCard = ({ onLogin, onRegister }: { onLogin: () => void; onRegister: () => void }) => (
+  <View style={auth.wrap}>
+    <View style={auth.header}>
+      <View style={auth.iconRing}>
+        <Ionicons name="log-in-outline" size={22} color={colors.primary} />
       </View>
-
-      <View style={guestStyles.card}>
-        <View style={guestStyles.cardHead}>
-          <View style={guestStyles.cardHeadIcon}>
-            <Ionicons name="log-in-outline" size={18} color={GUEST.orange} />
-          </View>
-          <View style={guestStyles.cardHeadText}>
-            <Text style={guestStyles.cardTitle}>ابدأ تجربتك الآن</Text>
-            <View style={guestStyles.cardTitleAccent} />
-            <Text style={guestStyles.cardBody}>
-              أنشئ حسابًا لمتابعة طلباتك وحفظ تفضيلاتك، أو سجّل الدخول إن كان لديك حساب بالفعل.
-            </Text>
-          </View>
-        </View>
-
-        <View style={guestStyles.perksBlock}>
-          {GUEST_PERKS.map((perk) => (
-            <View key={perk.text} style={guestStyles.perkRow}>
-              <View style={guestStyles.perkIcon}>
-                <Ionicons name={perk.icon} size={16} color={GUEST.orange} />
-              </View>
-              <Text style={guestStyles.perkText}>{perk.text}</Text>
-            </View>
-          ))}
-        </View>
-
-        <AppButton label="تسجيل الدخول" icon="log-in-outline" onPress={onLogin} variant="primary" size="lg" fullWidth />
-        <AppButton label="إنشاء حساب جديد" icon="person-add-outline" onPress={onRegister} variant="secondary" fullWidth />
+      <View style={auth.headerText}>
+        <Text style={auth.title}>ابدأ تجربتك</Text>
+        <Text style={auth.body}>
+          أنشئ حسابًا لمتابعة الطلبات وحفظ تفضيلاتك، أو سجّل الدخول إن كان لديك حساب بالفعل.
+        </Text>
       </View>
-    </ScrollView>
-  </AppContainer>
+    </View>
+
+    <View style={auth.perksBlock}>
+      {AUTH_PERKS.map((perk) => (
+        <View key={perk.text} style={auth.perkRow}>
+          <View style={auth.perkIcon}>
+            <Ionicons name={perk.icon} size={14} color={colors.primary} />
+          </View>
+          <Text style={auth.perkText}>{perk.text}</Text>
+        </View>
+      ))}
+    </View>
+
+    <AppButton label="تسجيل الدخول" icon="log-in-outline" onPress={onLogin} variant="primary" size="lg" fullWidth />
+    <AppButton
+      label="إنشاء حساب جديد"
+      icon="person-add-outline"
+      onPress={onRegister}
+      variant="secondary"
+      fullWidth
+    />
+  </View>
 );
 
-const GUEST = {
-  orange: "#FF6B00",
-  text: "#0F1B35",
-  muted: "#64748B",
-  border: "#E5EEF7",
-  bg: "#F7FAFD",
-  white: "#FFFFFF",
-  shadow: "rgba(15, 27, 53, 0.08)",
-  perkBg: "#FFF8F2"
-} as const;
-
-const guestStyles = StyleSheet.create({
-  screen: {
-    flex: 1,
-    backgroundColor: GUEST.bg
-  },
-  content: {
-    paddingBottom: 120
-  },
-  heroSection: {
-    height: 318,
-    marginBottom: spacing.sm,
-    paddingHorizontal: spacing.lg,
-    overflow: "visible",
-    justifyContent: "flex-end"
-  },
-  heroVisual: {
-    position: "absolute",
-    top: -5,
-    right: -32,
-    width: 310,
-    height: 248,
-    zIndex: 1
-  },
-  heroBlobPrimary: {
-    position: "absolute",
-    top: -10,
-    right: -48,
-    width: 250,
-    height: 250,
-    borderRadius: 125,
-    backgroundColor: "rgba(255, 107, 0, 0.2)"
-  },
-  heroBlobSecondary: {
-    position: "absolute",
-    top: 12,
-    right: 28,
-    width: 150,
-    height: 150,
-    borderRadius: 75,
-    backgroundColor: "rgba(255, 183, 3, 0.14)"
-  },
-  heroImage: {
-    width: "100%",
-    height: "140%"
-  },
-  welcomeText: {
-    position: "absolute",
-    left: -30,
-    bottom: 2,
-    width: "55%",
-    maxWidth: 228,
-    zIndex: 3,
-    alignItems: "flex-end"
-  },
-  welcomeLine: {
-    color: GUEST.text,
-    fontSize: typography.h2,
-    fontWeight: "800",
-    textAlign: "right",
-    width: "100%"
-  },
-  brandLine: {
-    color: GUEST.orange,
-    fontSize: typography.h1,
-    fontWeight: "900",
-    textAlign: "right",
-    marginTop: 2,
-    width: "100%"
-  },
-  brandUnderline: {
-    alignSelf: "flex-end",
-    width: 120,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: GUEST.orange,
-    marginTop: 6,
-    opacity: 0.85
-  },
-  welcomeDesc: {
-    marginTop: spacing.sm,
-    color: GUEST.muted,
-    fontSize: typography.bodySm,
-    lineHeight: 22,
-    textAlign: "right",
-    fontWeight: "600",
-    width: "100%"
-  },
-  welcomeDescSecond: {
-    marginTop: 2,
-    color: GUEST.muted,
-    fontSize: typography.bodySm,
-    lineHeight: 22,
-    textAlign: "right",
-    fontWeight: "600",
-    width: "100%"
-  },
-  card: {
-    marginTop: spacing.xs,
-    marginHorizontal: spacing.lg,
-    borderRadius: 20,
-    backgroundColor: GUEST.white,
+const auth = StyleSheet.create({
+  wrap: {
+    borderRadius: radius.xl,
+    borderWidth: 1,
+    borderColor: colors.borderStrong,
+    backgroundColor: colors.surface,
     padding: spacing.lg,
     gap: spacing.md,
-    shadowColor: GUEST.shadow,
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 1,
-    shadowRadius: 18,
-    elevation: 4
+    marginBottom: spacing.md,
+    ...shadows.soft
   },
-  cardHead: {
+  header: {
     flexDirection: "row-reverse",
-    alignItems: "flex-start",
+    alignItems: "center",
     gap: spacing.sm
   },
-  cardHeadIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
-    backgroundColor: GUEST.perkBg,
+  iconRing: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: colors.primarySoft,
+    borderWidth: 1,
+    borderColor: colors.borderStrong,
     alignItems: "center",
     justifyContent: "center"
   },
-  cardHeadText: {
-    flex: 1,
-    alignItems: "flex-end"
-  },
-  cardTitle: {
-    color: GUEST.text,
+  headerText: { flex: 1, minWidth: 0 },
+  title: {
+    color: colors.text,
     fontSize: typography.h2,
-    fontWeight: "900",
+    fontWeight: "800",
     textAlign: "right"
   },
-  cardTitleAccent: {
-    alignSelf: "flex-end",
-    width: 48,
-    height: 3,
-    borderRadius: 2,
-    backgroundColor: GUEST.orange,
-    marginTop: 6,
-    marginBottom: 8
-  },
-  cardBody: {
-    color: GUEST.muted,
+  body: {
+    marginTop: 4,
+    color: colors.textSecondary,
     fontSize: typography.bodySm,
-    lineHeight: 22,
+    lineHeight: 21,
     textAlign: "right"
   },
   perksBlock: {
-    gap: spacing.sm
+    borderRadius: radius.md,
+    backgroundColor: colors.surfaceElevated,
+    padding: spacing.sm,
+    gap: 8
   },
   perkRow: {
     flexDirection: "row-reverse",
     alignItems: "center",
-    gap: spacing.sm,
-    borderRadius: 14,
-    backgroundColor: GUEST.perkBg,
-    paddingHorizontal: spacing.md,
-    paddingVertical: 12
+    gap: spacing.xs
   },
   perkIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: 10,
-    backgroundColor: GUEST.white,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: colors.surface,
     alignItems: "center",
     justifyContent: "center"
   },
   perkText: {
     flex: 1,
-    color: GUEST.text,
+    color: colors.textSecondary,
     fontSize: typography.bodySm,
     fontWeight: "700",
     textAlign: "right"
