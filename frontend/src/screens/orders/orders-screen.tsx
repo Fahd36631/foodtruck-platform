@@ -17,10 +17,10 @@ import { useAuthStore } from "@/store/auth-store";
 import { colors, iconSize, radius, shadows, spacing, typography } from "@/theme/tokens";
 
 const statusLabel: Record<string, string> = {
-  pending: "تم استلام الطلب",
+  pending: "جديد",
   preparing: "قيد التحضير",
   ready: "جاهز للاستلام",
-  picked_up: "تم التسليم",
+  picked_up: "تم الاستلام",
   cancelled: "ملغي"
 };
 
@@ -79,7 +79,7 @@ export const OrdersScreen = () => {
     return (
       <AppContainer edges={["top"]}>
         <View style={styles.guestWrap}>
-          <PageHeader title="طلباتي" subtitle="تابع كل طلباتك من مكان واحد" />
+          <PageHeader title="الطلبات" subtitle="تابع كل طلباتك من مكان واحد" />
           <View style={styles.guestCard}>
             <View style={styles.guestIconWrap}>
               <Ionicons name="receipt-outline" size={iconSize.xl} color={colors.primary} />
@@ -99,7 +99,7 @@ export const OrdersScreen = () => {
     return (
       <AppContainer edges={["top"]}>
         <View style={styles.pad}>
-          <PageHeader title="طلباتي" subtitle="جارِ تحميل طلباتك..." />
+          <PageHeader title="الطلبات" subtitle="جارِ تحميل طلباتك..." />
           <LoadingSkeleton rows={5} />
         </View>
       </AppContainer>
@@ -110,7 +110,7 @@ export const OrdersScreen = () => {
     return (
       <AppContainer edges={["top"]}>
         <View style={styles.pad}>
-          <PageHeader title="طلباتي" />
+          <PageHeader title="الطلبات" />
           <View style={styles.errorCard}>
             <Ionicons name="alert-circle-outline" size={iconSize.xl} color={colors.danger} />
             <Text style={styles.errorText}>{getReadableNetworkError(ordersQuery.error)}</Text>
@@ -142,7 +142,7 @@ export const OrdersScreen = () => {
           />
         }
       >
-        <PageHeader title="طلباتي" subtitle="تابع طلباتك الحالية والسابقة" />
+        <PageHeader title="الطلبات" subtitle="تابع طلباتك الحالية والسابقة بواجهة منظمة" />
 
         <OrdersTabs
           selected={selectedTab}

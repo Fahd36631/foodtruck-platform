@@ -13,15 +13,11 @@ import { TruckDetailsScreen } from "./src/screens/truck/truck-details-screen";
 import { OwnerDashboardScreen } from "./src/screens/owner/owner-dashboard-screen";
 import { AdminPanelScreen } from "./src/screens/admin/admin-panel-screen";
 import { AuthScreen } from "./src/screens/auth/auth-screen";
-import { VerifyEmailScreen } from "./src/screens/auth/verify-email-screen";
 import { OwnerOnboardingScreen } from "./src/screens/owner/owner-onboarding-screen";
 import { CartScreen } from "./src/screens/cart/cart-screen";
 import { CheckoutScreen } from "./src/screens/checkout/checkout-screen";
 import { PaymentSuccessScreen } from "./src/screens/checkout/payment-success-screen";
 import { OrderDetailsScreen } from "./src/screens/orders/order-details-screen";
-import { ComingSoonScreen } from "./src/screens/auth/coming-soon-screen";
-import { AdminCreateAccountScreen } from "./src/screens/auth/admin-create-account-screen";
-import { CustomerAccountEditScreen } from "./src/screens/auth/customer-account-edit-screen";
 console.log("ROOT LOADED");
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
@@ -64,7 +60,6 @@ export default function App() {
             >
               <Stack.Screen name="MainTabs" component={MainTabs} />
               <Stack.Screen name="Auth" component={AuthScreen} />
-              <Stack.Screen name="VerifyEmail" component={VerifyEmailScreen} />
               <Stack.Screen name="TruckDetails" component={TruckDetailsScreen} />
               <Stack.Screen name="OrderDetails" component={OrderDetailsScreen} />
               <Stack.Screen name="Cart" component={CartScreen} />
@@ -73,9 +68,6 @@ export default function App() {
               <Stack.Screen name="OwnerDashboard" component={OwnerDashboardScreen} />
               <Stack.Screen name="OwnerOnboarding" component={OwnerOnboardingScreen} />
               <Stack.Screen name="AdminPanel" component={AdminPanelScreen} />
-              <Stack.Screen name="CustomerAccountEdit" component={CustomerAccountEditScreen} />
-              <Stack.Screen name="AdminCreateAccount" component={AdminCreateAccountScreen} />
-              <Stack.Screen name="ComingSoon" component={ComingSoonScreen} />
             </Stack.Navigator>
           </NavigationContainer>
         )}

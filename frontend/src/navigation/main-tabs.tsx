@@ -9,7 +9,6 @@ import { OwnerOverviewScreen } from "@/screens/owner/owner-overview-screen";
 import { OwnerIncomingOrdersScreen } from "@/screens/owner/owner-incoming-orders-screen";
 import { AdminPanelScreen } from "@/screens/admin/admin-panel-screen";
 import { useAuthStore } from "@/store/auth-store";
-import { OWNER } from "@/features/owner/theme";
 import { colors, shadows } from "@/theme/tokens";
 
 export type MainTabParamList = {
@@ -60,36 +59,8 @@ export const MainTabs = () => {
   });
 
   if (roleCode === "truck_owner") {
-    const ownerTabOptions = ({ route }: { route: { name: string } }) => ({
-      headerShown: false,
-      tabBarStyle: {
-        backgroundColor: OWNER.white,
-        borderTopWidth: 1,
-        borderTopColor: OWNER.border,
-        height: 78,
-        paddingBottom: 12,
-        paddingTop: 8,
-        ...shadows.tabBar
-      },
-      tabBarActiveTintColor: OWNER.orange,
-      tabBarInactiveTintColor: OWNER.muted,
-      tabBarLabelStyle: {
-        fontWeight: "700" as const,
-        fontSize: 11,
-        marginTop: 2
-      },
-      tabBarIcon: ({ color, size, focused }: { color: string; size: number; focused: boolean }) => {
-        const iconNameByRoute: Record<string, keyof typeof Ionicons.glyphMap> = {
-          Profile: focused ? "person-circle" : "person-circle-outline",
-          OwnerIncomingOrders: focused ? "list" : "list-outline",
-          OwnerOverview: focused ? "speedometer" : "speedometer-outline"
-        };
-        return <Ionicons name={iconNameByRoute[route.name] ?? "ellipse-outline"} size={size} color={color} />;
-      }
-    });
-
     return (
-      <Tab.Navigator screenOptions={ownerTabOptions} initialRouteName="OwnerOverview">
+      <Tab.Navigator screenOptions={commonScreenOptions} initialRouteName="OwnerOverview">
         <Tab.Screen name="Profile" component={ProfileScreen} options={{ tabBarLabel: "حسابي" }} />
         <Tab.Screen name="OwnerIncomingOrders" component={OwnerIncomingOrdersScreen} options={{ tabBarLabel: "طلبات الوارد" }} />
         <Tab.Screen name="OwnerOverview" component={OwnerOverviewScreen} options={{ tabBarLabel: "لوحة التشغيل" }} />

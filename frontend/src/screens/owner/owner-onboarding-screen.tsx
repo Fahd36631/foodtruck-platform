@@ -1,18 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import {
-  Alert,
-  Image,
-  Keyboard,
-  KeyboardAvoidingView,
-  Modal,
-  Platform,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View
-} from "react-native";
+import { Alert, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
@@ -22,34 +9,34 @@ import * as DocumentPicker from "expo-document-picker";
 import * as Location from "expo-location";
 import type { MapPressEvent, Region } from "react-native-maps";
 import { Ionicons } from "@expo/vector-icons";
-import { AppButton, AppContainer, CustomerMapView, LoadingSkeleton, Marker } from "@/ui";
+import DateTimePicker, { type DateTimePickerEvent } from "@react-native-community/datetimepicker";
+
+import { AppButton, AppContainer, CustomerMapView, Marker } from "@/ui";
 import { getMyOwnerTruckDraft, getMyOwnerTrucks, registerTruck, uploadSingleFile } from "@/features/trucks/api";
 import type { RootStackParamList } from "@/navigation/root-stack";
 import { getReadableNetworkError } from "@/api/network-error";
 import { useAuthStore } from "@/store/auth-store";
-import { FOOD_CATEGORY_OPTIONS } from "@/constants/food-categories";
-import { SAUDI_CITIES } from "@/constants/saudi-cities";
-import {
-  defaultWorkEnd,
-  defaultWorkStart,
-  formatWorkingHoursDisplay,
-  formatWorkingHoursRange,
-  isValidWorkRange,
-  parseWorkingHoursRange
-} from "@/utils/working-hours";
-import { OwnerPageHeader } from "@/features/owner/components/owner-page-header";
-import { OwnerLicenseExpiryPickerSheet } from "@/features/owner/components/owner-license-expiry-picker-sheet";
-import { OwnerWorkHoursPickerSheet } from "@/features/owner/components/owner-work-hours-picker-sheet";
-import { formatLicenseExpiryApi, formatLicenseExpiryLabel } from "@/utils/license-expiry-date";
-import { resolveMediaUrl } from "@/utils/media-url";
 import { colors, radius, shadows, spacing, typography } from "@/theme/tokens";
 
 type RootNav = NativeStackNavigationProp<RootStackParamList>;
 type OwnerOnboardingRoute = RouteProp<RootStackParamList, "OwnerOnboarding">;
 
-const rtlText = {
-  textAlign: "right" as const,
-  writingDirection: "rtl" as const
+const FOOD_CATEGORY_OPTIONS = [
+  "برجر",
+  "بيتزا",
+  "مشروبات",
+  "قهوة",
+  "حلويات",
+  "سندويتشات",
+  "مأكولات بحرية",
+  "مأكولات شعبية"
+];
+
+const formatDate = (date: Date): string => {
+  const yyyy = date.getFullYear();
+  const mm = `${date.getMonth() + 1}`.padStart(2, "0");
+  const dd = `${date.getDate()}`.padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
 };
 
 const toNullableNumber = (value: unknown): number | null => {
@@ -77,11 +64,7 @@ export const OwnerOnboardingScreen = () => {
   const [pickedLocation, setPickedLocation] = useState<{ latitude: number; longitude: number } | null>(null);
   const [isMapVisible, setIsMapVisible] = useState(false);
   const [isFoodCategoryVisible, setIsFoodCategoryVisible] = useState(false);
-  const [isCityVisible, setIsCityVisible] = useState(false);
-  const [isExpiryPickerVisible, setIsExpiryPickerVisible] = useState(false);
-  const [workStart, setWorkStart] = useState(() => defaultWorkStart());
-  const [workEnd, setWorkEnd] = useState(() => defaultWorkEnd());
-  const [isWorkHoursVisible, setIsWorkHoursVisible] = useState(false);
+  const [isDatePickerVisible, setIsDatePickerVisible] = useState(false);
   const [mapRegion, setMapRegion] = useState<Region>({
     latitude: 24.7136,
     longitude: 46.6753,
@@ -97,6 +80,7 @@ export const OwnerOnboardingScreen = () => {
   const [coverImageName, setCoverImageName] = useState("");
   const [coverImageMimeType, setCoverImageMimeType] = useState<string | undefined>();
   const [foodType, setFoodType] = useState("");
+  const [workingHours, setWorkingHours] = useState("");
   const [contactPhone, setContactPhone] = useState("");
   const [description, setDescription] = useState("");
   const [formError, setFormError] = useState("");
@@ -119,18 +103,10 @@ export const OwnerOnboardingScreen = () => {
     return ownerTrucksQuery.data?.find((t) => t.id === draftRow.id) ?? null;
   }, [draftRow?.id, ownerTrucksQuery.data]);
 
-  const reviewNote = truckMeta?.review_note?.trim() || draftRow?.rejection_reason?.trim() || null;
+  const reviewNote = truckMeta?.review_note?.trim() ?? null;
   const approvalStatus = draftRow?.approval_status;
 
-  const licenseExpiryDate = selectedExpiryDate ? formatLicenseExpiryApi(selectedExpiryDate) : "";
-  const licenseExpiryLabel = selectedExpiryDate ? formatLicenseExpiryLabel(selectedExpiryDate) : "";
-  const workingHoursValue = useMemo(() => formatWorkingHoursRange(workStart, workEnd), [workStart, workEnd]);
-  const workingHoursLabel = useMemo(() => formatWorkingHoursDisplay(workStart, workEnd), [workStart, workEnd]);
-
-  const openWorkHoursPicker = () => {
-    Keyboard.dismiss();
-    setIsWorkHoursVisible(true);
-  };
+  const licenseExpiryDate = selectedExpiryDate ? formatDate(selectedExpiryDate) : "";
 
   useEffect(() => {
     const draft = ownerDraftQuery.data;
@@ -141,11 +117,7 @@ export const OwnerOnboardingScreen = () => {
     setDisplayName(draft.display_name ?? "");
     setFoodType(draft.category_name ?? "");
     setDescription(draft.description ?? "");
-    const parsedHours = parseWorkingHoursRange(draft.working_hours);
-    if (parsedHours) {
-      setWorkStart(parsedHours.start);
-      setWorkEnd(parsedHours.end);
-    }
+    setWorkingHours(draft.working_hours ?? "");
     setContactPhone(draft.contact_phone ?? "");
     setCity(draft.city ?? "");
     setNeighborhood(draft.neighborhood ?? "");
@@ -160,10 +132,9 @@ export const OwnerOnboardingScreen = () => {
       }));
     }
     setLicenseNumber(draft.license_number ?? "");
-    const existingLicenseUrl = draft.license_file_url ?? draft.document_url;
-    if (existingLicenseUrl) {
-      setLicenseDocumentUri(existingLicenseUrl);
-      setLicenseDocumentName("");
+    if (draft.document_url) {
+      setLicenseDocumentUri(draft.document_url);
+      setLicenseDocumentName("ملف الرخصة الحالي");
     }
     if (draft.cover_image_url) {
       setCoverImageUri(draft.cover_image_url);
@@ -175,6 +146,7 @@ export const OwnerOnboardingScreen = () => {
         setSelectedExpiryDate(parsedDate);
       }
     }
+
   }, [ownerDraftQuery.data]);
 
   const isFormValid = useMemo(() => {
@@ -187,7 +159,7 @@ export const OwnerOnboardingScreen = () => {
       !!licenseDocumentUri.trim() &&
       !!licenseExpiryDate.trim() &&
       !!foodType.trim() &&
-      isValidWorkRange(workStart, workEnd) &&
+      !!workingHours.trim() &&
       !!contactPhone.trim()
     );
   }, [
@@ -200,8 +172,7 @@ export const OwnerOnboardingScreen = () => {
     licenseNumber,
     neighborhood,
     pickedLocation,
-    workEnd,
-    workStart
+    workingHours
   ]);
 
   const openMapAndPickCurrentLocation = async () => {
@@ -261,9 +232,14 @@ export const OwnerOnboardingScreen = () => {
     }
   };
 
-  const openExpiryPicker = () => {
-    Keyboard.dismiss();
-    setIsExpiryPickerVisible(true);
+  const onExpiryDateChange = (event: DateTimePickerEvent, date?: Date) => {
+    if (Platform.OS === "android") {
+      setIsDatePickerVisible(false);
+    }
+    if (event.type === "set" && date) {
+      setSelectedExpiryDate(date);
+      setFormError("");
+    }
   };
 
   const registerMutation = useMutation({
@@ -296,7 +272,7 @@ export const OwnerOnboardingScreen = () => {
           displayName: displayName.trim(),
           categoryName: foodType.trim(),
           description: description.trim() || undefined,
-          workingHours: workingHoursValue,
+          workingHours: workingHours.trim(),
           contactPhone: contactPhone.trim(),
           coverImageUrl: uploadedCover?.url,
           location: {
@@ -317,11 +293,9 @@ export const OwnerOnboardingScreen = () => {
     onSuccess: async () => {
       setFormError("");
       setSuccessMessage(
-        !isUpdateFlow
-          ? "تم استلام طلبك، سيتم مراجعته من قبل الإدارة."
-          : approvalStatus === "rejected"
-            ? "تم إعادة الإرسال بنجاح؛ طلبك الآن قيد المراجعة."
-            : "تم إرسال طلب تحديث بيانات الترك للإدارة."
+        isUpdateFlow
+          ? "تم إرسال طلب تحديث بيانات الترك للإدارة."
+          : "تم استلام طلبك، سيتم مراجعته من قبل الإدارة."
       );
       await queryClient.invalidateQueries({ queryKey: ["owner-my-trucks"] });
       await queryClient.invalidateQueries({ queryKey: ["owner-truck-draft"] });
@@ -351,99 +325,63 @@ export const OwnerOnboardingScreen = () => {
     registerMutation.mutate();
   };
 
-  const showDraftLoading = isUpdateFlow && !!accessToken && !ownerDraftQuery.isFetched;
-  const coverAttachmentHint =
-    !coverImageUri.trim()
-      ? "اختر صورة من الجهاز"
-      : coverImageUri.trim().startsWith("http")
-        ? "صورة الترك الحالية — يمكنك اختيار صورة جديدة إن رغبت"
-        : "تم اختيار صورة جديدة";
-  const licenseAttachmentHint =
-    !licenseDocumentUri.trim()
-      ? "اختر ملف PDF أو صورة للرخصة"
-      : licenseDocumentUri.trim().startsWith("http")
-        ? "تم إرفاق رخصة سابقًا — يمكنك إرفاق ملف جديد إن رغبت"
-        : licenseDocumentName.trim() || "تم اختيار ملف جديد";
+  console.log("isFormValid:", isFormValid);
 
   return (
     <AppContainer edges={["top"]}>
-      <View style={styles.screen}>
-      {showDraftLoading ? (
-        <View style={styles.loadingPad}>
-          <LoadingSkeleton rows={10} />
-        </View>
-      ) : (
-      <>
       <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === "ios" ? "padding" : undefined} keyboardVerticalOffset={20}>
         <ScrollView style={styles.flex} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         {submitLocked ? (
           <View style={[styles.noticeBanner, styles.noticeWarning]}>
+            <Ionicons name="time-outline" size={22} color={colors.warning} />
             <Text style={styles.noticeBody}>
               يوجد طلب تحديث قيد المراجعة من الإدارة. لا يمكن إرسال طلب جديد حتى تُعالَج المراجعة الحالية.
             </Text>
-            <Ionicons name="time-outline" size={22} color={colors.warning} style={styles.noticeIcon} />
           </View>
         ) : null}
         {approvalStatus === "rejected" && reviewNote ? (
           <View style={[styles.noticeBanner, styles.noticeDanger]}>
+            <Ionicons name="close-circle-outline" size={22} color={colors.danger} />
             <View style={styles.noticeTextBlock}>
               <Text style={styles.noticeTitle}>آخر قرار: مرفوض</Text>
               <Text style={styles.noticeBody}>{reviewNote}</Text>
             </View>
-            <Ionicons name="close-circle-outline" size={22} color={colors.danger} style={styles.noticeIcon} />
           </View>
         ) : null}
         {approvalStatus === "rejected" && !reviewNote ? (
           <View style={[styles.noticeBanner, styles.noticeDanger]}>
+            <Ionicons name="alert-circle-outline" size={22} color={colors.danger} />
             <Text style={styles.noticeBody}>تم رفض آخر طلب. عدّل البيانات ثم أعد الإرسال للمراجعة.</Text>
-            <Ionicons name="alert-circle-outline" size={22} color={colors.danger} style={styles.noticeIcon} />
           </View>
         ) : null}
         {isUpdateFlow && approvalStatus === "approved" && !submitLocked ? (
           <View style={[styles.noticeBanner, styles.noticeInfo]}>
+            <Ionicons name="information-circle-outline" size={22} color={colors.primaryDark} />
             <Text style={styles.noticeBody}>
               عند الضغط على حفظ يُرسل طلب تحديث للإدارة. لن تُحدَّث بياناتك لدى الزبائن قبل الموافقة.
             </Text>
-            <Ionicons name="information-circle-outline" size={22} color={colors.primaryDark} style={styles.noticeIcon} />
           </View>
         ) : null}
 
         <View style={styles.heroCard}>
-          <OwnerPageHeader
-            compact
-            title={isUpdateFlow ? "بيانات الترك" : "إكمال بيانات الترك"}
-            subtitle={
-              isUpdateFlow
-                ? "تُحمَّل الحقول من بيانات تسجيلك الحالية. عدّل ما تحتاج ثم أرسل طلب التحديث لمراجعة الإدارة."
-                : "أدخل بيانات عربتك مرة واحدة ثم ستظهر حالتها بانتظار المراجعة."
-            }
-          />
+          <Text style={styles.title}>{isUpdateFlow ? "بيانات الترك" : "إكمال بيانات الفود ترك"}</Text>
+          <Text style={styles.subtitle}>
+            {isUpdateFlow
+              ? "تُحمَّل الحقول من بيانات تسجيلك الحالية. عدّل ما تحتاج ثم أرسل طلب التحديث لمراجعة الإدارة."
+              : "أدخل بيانات عربتك مرة واحدة ثم ستظهر حالتها بانتظار المراجعة."}
+          </Text>
         </View>
 
         <View style={styles.card}>
-          <Text style={styles.sectionTitle}>بيانات الترك</Text>
-          <TextInput style={styles.input} placeholder="اسم الترك" placeholderTextColor={colors.textMuted} value={displayName} onChangeText={setDisplayName} textAlign="right" />
+          <Text style={styles.sectionTitle}>بيانات الفود ترك</Text>
+          <TextInput style={styles.input} placeholder="اسم الفود ترك" placeholderTextColor={colors.textMuted} value={displayName} onChangeText={setDisplayName} />
           <Pressable style={styles.inputLikeButton} onPress={() => setIsFoodCategoryVisible(true)}>
-            <Ionicons name="chevron-down" size={18} color={colors.primary} style={styles.fieldIconLeading} />
-            <Text style={[styles.inputLikeButtonText, foodType ? styles.inputLikeButtonValue : styles.inputLikeButtonPlaceholder]}>
-              {foodType || "نوع الأكل / المشروبات"}
-            </Text>
+            <Text style={foodType ? styles.inputLikeButtonValue : styles.inputLikeButtonPlaceholder}>{foodType || "نوع الأكل / المشروبات"}</Text>
+            <Ionicons name="chevron-down" size={18} color={colors.primary} />
           </Pressable>
-          <Pressable style={styles.inputLikeButton} onPress={() => setIsCityVisible(true)}>
-            <Ionicons name="chevron-down" size={18} color={colors.primary} style={styles.fieldIconLeading} />
-            <Text style={[styles.inputLikeButtonText, city ? styles.inputLikeButtonValue : styles.inputLikeButtonPlaceholder]}>
-              {city || "المدينة"}
-            </Text>
-          </Pressable>
-          <TextInput style={styles.input} placeholder="الحي" placeholderTextColor={colors.textMuted} value={neighborhood} onChangeText={setNeighborhood} textAlign="right" />
-          <Text style={styles.fieldLabel}>أوقات العمل</Text>
-          <Pressable style={styles.inputLikeButton} onPress={openWorkHoursPicker}>
-            <Text style={[styles.inputLikeButtonText, styles.inputLikeButtonValue]}>{workingHoursLabel}</Text>
-            <Ionicons name="time-outline" size={18} color={colors.primary} style={styles.fieldIconTrailing} />
-          </Pressable>
-          {!isValidWorkRange(workStart, workEnd) ? (
-            <Text style={styles.inlineHint}>يجب أن يكون وقت النهاية بعد وقت البداية.</Text>
-          ) : null}
+          <TextInput style={styles.input} placeholder="المدينة" placeholderTextColor={colors.textMuted} value={city} onChangeText={setCity} />
+          <TextInput style={styles.input} placeholder="الحي" placeholderTextColor={colors.textMuted} value={neighborhood} onChangeText={setNeighborhood} />
+          <TextInput style={styles.input} placeholder="أوقات العمل" placeholderTextColor={colors.textMuted} value={workingHours} onChangeText={setWorkingHours} />
           <TextInput
             style={styles.input}
             placeholder="رقم التواصل"
@@ -451,23 +389,21 @@ export const OwnerOnboardingScreen = () => {
             value={contactPhone}
             onChangeText={setContactPhone}
             keyboardType="phone-pad"
-            textAlign="right"
           />
           <TextInput
             style={[styles.input, styles.textArea]}
-            placeholder="وصف الترك"
+            placeholder="وصف الفود ترك"
             placeholderTextColor={colors.textMuted}
             value={description}
             onChangeText={setDescription}
             multiline
-            textAlign="right"
           />
 
         <Text style={styles.sectionTitle}>بيانات الموقع</Text>
         <Pressable style={styles.attachmentButton} onPress={openMapAndPickCurrentLocation}>
           <View style={styles.attachmentLabelWrap}>
+            <Ionicons name="map-outline" size={18} color={colors.primary} />
             <Text style={styles.attachmentLabel}>تحديد الموقع من الخريطة</Text>
-            <Ionicons name="map-outline" size={18} color={colors.primary} style={styles.fieldIconTrailing} />
           </View>
           <Text style={styles.attachmentHint}>
             {pickedLocation
@@ -479,39 +415,30 @@ export const OwnerOnboardingScreen = () => {
         <Text style={styles.sectionTitle}>المرفقات والرخصة</Text>
         <Pressable style={styles.attachmentButton} onPress={pickTruckImage}>
           <View style={styles.attachmentLabelWrap}>
+            <Ionicons name="image-outline" size={18} color={colors.primary} />
             <Text style={styles.attachmentLabel}>إرفاق صورة الترك</Text>
-            <Ionicons name="image-outline" size={18} color={colors.primary} style={styles.fieldIconTrailing} />
           </View>
-          <Text style={styles.attachmentHint}>{coverAttachmentHint}</Text>
+          <Text style={styles.attachmentHint}>{coverImageUri ? "تم اختيار صورة بنجاح" : "اختر صورة من الجهاز"}</Text>
         </Pressable>
-        {coverImageUri.trim().startsWith("http") ? (
-          <Image
-            accessibilityLabel="صورة الترك الحالية"
-            source={{ uri: resolveMediaUrl(coverImageUri.trim()) ?? coverImageUri.trim() }}
-            style={styles.coverPreview}
-            resizeMode="cover"
-          />
-        ) : null}
         <TextInput
           style={styles.input}
           placeholder="رقم رخصة البلدية"
           placeholderTextColor={colors.textMuted}
           value={licenseNumber}
           onChangeText={setLicenseNumber}
-          textAlign="right"
         />
         <Pressable style={styles.attachmentButton} onPress={pickLicenseDocument}>
           <View style={styles.attachmentLabelWrap}>
+            <Ionicons name="document-attach-outline" size={18} color={colors.primary} />
             <Text style={styles.attachmentLabel}>إرفاق رخصة البلدية</Text>
-            <Ionicons name="document-attach-outline" size={18} color={colors.primary} style={styles.fieldIconTrailing} />
           </View>
-          <Text style={styles.attachmentHint}>{licenseAttachmentHint}</Text>
+          <Text style={styles.attachmentHint}>{licenseDocumentName || "اختر ملف PDF أو صورة للرخصة"}</Text>
         </Pressable>
-        <Pressable style={styles.inputLikeButton} onPress={openExpiryPicker}>
-          <Text style={[styles.inputLikeButtonText, licenseExpiryLabel ? styles.inputLikeButtonValue : styles.inputLikeButtonPlaceholder]}>
-            {licenseExpiryLabel || "تاريخ انتهاء الرخصة"}
+        <Pressable style={styles.inputLikeButton} onPress={() => setIsDatePickerVisible(true)}>
+          <Text style={licenseExpiryDate ? styles.inputLikeButtonValue : styles.inputLikeButtonPlaceholder}>
+            {licenseExpiryDate || "تاريخ انتهاء الرخصة"}
           </Text>
-          <Ionicons name="calendar-outline" size={18} color={colors.primary} style={styles.fieldIconTrailing} />
+          <Ionicons name="calendar-outline" size={18} color={colors.primary} />
         </Pressable>
         </View>
 
@@ -532,12 +459,12 @@ export const OwnerOnboardingScreen = () => {
 
         <Modal visible={isFoodCategoryVisible} transparent animationType="slide" onRequestClose={() => setIsFoodCategoryVisible(false)}>
           <Pressable style={styles.dropdownBackdrop} onPress={() => setIsFoodCategoryVisible(false)}>
-            <Pressable style={styles.dropdownCard} onPress={() => undefined}>
-              <Text style={styles.dropdownTitle}>نوع الأكل / المشروبات</Text>
+            <View style={styles.dropdownCard}>
+              <Text style={styles.dropdownTitle}>اختر نوع النشاط</Text>
               {FOOD_CATEGORY_OPTIONS.map((option) => (
                 <Pressable
                   key={option}
-                  style={[styles.dropdownOption, foodType === option && styles.dropdownOptionActive]}
+                  style={styles.dropdownOption}
                   onPress={() => {
                     setFoodType(option);
                     setIsFoodCategoryVisible(false);
@@ -546,62 +473,18 @@ export const OwnerOnboardingScreen = () => {
                   <Text style={styles.dropdownOptionText}>{option}</Text>
                 </Pressable>
               ))}
-            </Pressable>
+            </View>
           </Pressable>
         </Modal>
-
-        <Modal visible={isCityVisible} transparent animationType="slide" onRequestClose={() => setIsCityVisible(false)}>
-          <Pressable style={styles.dropdownBackdrop} onPress={() => setIsCityVisible(false)}>
-            <Pressable style={styles.dropdownCard} onPress={() => undefined}>
-              <Text style={styles.dropdownTitle}>اختر المدينة</Text>
-              <ScrollView style={styles.dropdownScroll} showsVerticalScrollIndicator={false}>
-                {SAUDI_CITIES.map((option) => (
-                  <Pressable
-                    key={option}
-                    style={[styles.dropdownOption, city === option && styles.dropdownOptionActive]}
-                    onPress={() => {
-                      setCity(option);
-                      setIsCityVisible(false);
-                    }}
-                  >
-                    <Text style={styles.dropdownOptionText}>{option}</Text>
-                  </Pressable>
-                ))}
-              </ScrollView>
-            </Pressable>
-          </Pressable>
-        </Modal>
-
-        <OwnerLicenseExpiryPickerSheet
-          visible={isExpiryPickerVisible}
-          value={selectedExpiryDate}
-          minimumDate={new Date()}
-          onClose={() => setIsExpiryPickerVisible(false)}
-          onConfirm={(date) => {
-            setSelectedExpiryDate(date);
-            setFormError("");
-          }}
-        />
-
-        <OwnerWorkHoursPickerSheet
-          visible={isWorkHoursVisible}
-          start={workStart}
-          end={workEnd}
-          onClose={() => setIsWorkHoursVisible(false)}
-          onConfirm={(start, end) => {
-            setWorkStart(start);
-            setWorkEnd(end);
-          }}
-        />
 
         <Modal visible={isMapVisible} transparent animationType="slide" onRequestClose={() => setIsMapVisible(false)}>
           <View style={styles.mapModalBackdrop}>
             <View style={styles.mapCard}>
               <View style={styles.mapHeader}>
-                <Pressable onPress={() => setIsMapVisible(false)} hitSlop={8}>
+                <Text style={styles.mapTitle}>حدد موقع الفود ترك</Text>
+                <Pressable onPress={() => setIsMapVisible(false)}>
                   <Ionicons name="close" size={22} color={colors.text} />
                 </Pressable>
-                <Text style={styles.mapTitle}>حدد موقع الترك</Text>
               </View>
               <CustomerMapView style={styles.map} initialRegion={mapRegion} onPress={onMapPress} userInterfaceStyle="light">
                 {pickedLocation ? <Marker coordinate={pickedLocation} /> : null}
@@ -610,32 +493,29 @@ export const OwnerOnboardingScreen = () => {
             </View>
           </View>
         </Modal>
+        {isDatePickerVisible ? (
+          <DateTimePicker
+            value={selectedExpiryDate ?? new Date()}
+            mode="date"
+            display={Platform.OS === "ios" ? "inline" : "default"}
+            onChange={onExpiryDateChange}
+            minimumDate={new Date()}
+          />
+        ) : null}
         </ScrollView>
       </KeyboardAvoidingView>
-      </>
-      )}
-      </View>
     </AppContainer>
   );
 };
 
 const styles = StyleSheet.create({
-  screen: {
-    flex: 1
-  },
-  loadingPad: {
-    flex: 1,
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.md
-  },
   flex: {
     flex: 1
   },
   content: {
-    alignItems: "stretch",
     paddingTop: spacing.md,
     paddingHorizontal: spacing.lg,
-    paddingBottom: 96
+    paddingBottom: 120
   },
   heroCard: {
     borderRadius: radius.lg,
@@ -644,8 +524,20 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     padding: spacing.md,
     marginBottom: spacing.md,
-    alignSelf: "stretch",
     ...shadows.soft
+  },
+  title: {
+    color: colors.brandBlue,
+    fontSize: typography.h1,
+    fontWeight: "800",
+    letterSpacing: 0.2
+  },
+  subtitle: {
+    color: colors.textSecondary,
+    marginTop: spacing.xs,
+    marginBottom: spacing.sm,
+    lineHeight: 22,
+    fontSize: typography.bodySm
   },
   card: {
     borderRadius: radius.lg,
@@ -655,17 +547,14 @@ const styles = StyleSheet.create({
     padding: spacing.md,
     gap: spacing.sm,
     marginBottom: spacing.md,
-    alignSelf: "stretch",
     ...shadows.soft
   },
   sectionTitle: {
-    ...rtlText,
     color: colors.primaryDark,
     fontWeight: "800",
     fontSize: typography.h3,
     marginTop: spacing.xs,
-    marginBottom: spacing.xs,
-    alignSelf: "stretch"
+    marginBottom: spacing.xs
   },
   input: {
     borderRadius: radius.md,
@@ -676,9 +565,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingVertical: 12,
     fontSize: typography.bodySm,
-    alignSelf: "stretch",
-    width: "100%",
-    ...rtlText
+    textAlign: "right",
+    writingDirection: "rtl"
   },
   inputLikeButton: {
     borderRadius: radius.md,
@@ -689,38 +577,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     flexDirection: "row",
     alignItems: "center",
-    alignSelf: "stretch",
-    width: "100%",
-    gap: spacing.sm
-  },
-  inputLikeButtonText: {
-    flex: 1,
-    flexShrink: 1,
-    fontSize: typography.bodySm,
-    includeFontPadding: false,
-    ...rtlText
-  },
-  fieldIconLeading: {
-    flexShrink: 0,
-    marginEnd: spacing.xs
-  },
-  fieldIconTrailing: {
-    flexShrink: 0,
-    marginStart: spacing.xs
-  },
-  fieldLabel: {
-    ...rtlText,
-    color: colors.textSecondary,
-    fontWeight: "700",
-    fontSize: typography.caption,
-    marginTop: 2,
-    alignSelf: "stretch"
-  },
-  inlineHint: {
-    ...rtlText,
-    color: colors.danger,
-    fontSize: typography.caption,
-    alignSelf: "stretch"
+    justifyContent: "space-between"
   },
   inputLikeButtonPlaceholder: {
     color: colors.textMuted
@@ -737,56 +594,38 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface2,
     paddingVertical: spacing.md,
     paddingHorizontal: spacing.md,
-    gap: 6,
-    alignSelf: "stretch",
-    width: "100%"
+    gap: 6
   },
   attachmentLabelWrap: {
     flexDirection: "row",
     alignItems: "center",
-    alignSelf: "stretch",
-    width: "100%",
-    gap: spacing.sm
+    gap: spacing.xs
   },
   attachmentLabel: {
-    ...rtlText,
-    flex: 1,
     color: colors.text,
     fontWeight: "700",
     fontSize: typography.bodySm
   },
   attachmentHint: {
-    ...rtlText,
     color: colors.textMuted,
-    fontSize: typography.caption,
-    alignSelf: "stretch"
-  },
-  coverPreview: {
-    width: "100%",
-    height: 160,
-    borderRadius: radius.md,
-    backgroundColor: colors.border,
-    alignSelf: "stretch"
+    fontSize: typography.caption
   },
   textArea: {
     minHeight: 96,
-    textAlignVertical: "top",
-    ...rtlText
+    textAlignVertical: "top"
   },
   successText: {
-    ...rtlText,
     color: colors.success,
     marginTop: spacing.sm,
     fontWeight: "700",
     fontSize: typography.bodySm,
-    alignSelf: "stretch"
+    textAlign: "center"
   },
   errorText: {
-    ...rtlText,
     color: colors.danger,
     marginTop: spacing.sm,
     fontSize: typography.bodySm,
-    alignSelf: "stretch"
+    textAlign: "center"
   },
   dropdownBackdrop: {
     flex: 1,
@@ -804,14 +643,10 @@ const styles = StyleSheet.create({
     ...shadows.card
   },
   dropdownTitle: {
-    ...rtlText,
     color: colors.text,
     fontWeight: "800",
     fontSize: typography.h3,
     marginBottom: spacing.xs
-  },
-  dropdownScroll: {
-    maxHeight: 360
   },
   dropdownOption: {
     borderRadius: radius.md,
@@ -819,15 +654,9 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     backgroundColor: colors.surface2,
     paddingVertical: 12,
-    paddingHorizontal: spacing.md,
-    marginBottom: spacing.xs
-  },
-  dropdownOptionActive: {
-    borderColor: colors.primary,
-    backgroundColor: colors.primaryMuted
+    paddingHorizontal: spacing.md
   },
   dropdownOptionText: {
-    ...rtlText,
     color: colors.text,
     fontWeight: "700",
     fontSize: typography.bodySm
@@ -851,15 +680,12 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: spacing.sm,
-    width: "100%"
+    marginBottom: spacing.sm
   },
   mapTitle: {
-    ...rtlText,
     color: colors.text,
     fontWeight: "800",
-    fontSize: typography.h3,
-    flex: 1
+    fontSize: typography.h3
   },
   map: {
     width: "100%",
@@ -869,9 +695,7 @@ const styles = StyleSheet.create({
   },
   ctaBlock: {
     gap: spacing.sm,
-    marginTop: spacing.md,
-    alignSelf: "stretch",
-    width: "100%"
+    marginTop: spacing.md
   },
   noticeBanner: {
     flexDirection: "row",
@@ -880,13 +704,7 @@ const styles = StyleSheet.create({
     padding: spacing.md,
     borderRadius: radius.lg,
     borderWidth: 1,
-    marginBottom: spacing.md,
-    alignSelf: "stretch",
-    width: "100%"
-  },
-  noticeIcon: {
-    flexShrink: 0,
-    marginTop: 2
+    marginBottom: spacing.md
   },
   noticeWarning: {
     backgroundColor: colors.warningMuted,
@@ -902,22 +720,19 @@ const styles = StyleSheet.create({
   },
   noticeTextBlock: {
     flex: 1,
-    gap: 4,
-    alignSelf: "stretch"
+    gap: 4
   },
   noticeTitle: {
-    ...rtlText,
     color: colors.text,
     fontWeight: "800",
     fontSize: typography.bodySm,
-    alignSelf: "stretch"
+    textAlign: "right"
   },
   noticeBody: {
-    ...rtlText,
     flex: 1,
     color: colors.textSecondary,
     fontSize: typography.bodySm,
     lineHeight: 22,
-    alignSelf: "stretch"
+    textAlign: "right"
   }
 });

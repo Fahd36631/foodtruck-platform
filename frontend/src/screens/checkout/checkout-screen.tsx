@@ -1,38 +1,19 @@
 import { useMemo, useState } from "react";
-import { ActivityIndicator, Image, type ImageSourcePropType, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { Ionicons } from "@expo/vector-icons";
-import { LinearGradient } from "expo-linear-gradient";
 
-import { AppContainer, EmptyState } from "@/ui";
-import type { CheckoutPaymentMethod } from "@/features/checkout/components/payment-method-card";
+import { AppButton, AppContainer, EmptyState } from "@/ui";
+import { PaymentMethodCard, type CheckoutPaymentMethod } from "@/features/checkout/components/payment-method-card";
 import { createOrderPayment, createPickupOrder } from "@/features/orders/api";
 import type { RootStackParamList } from "@/navigation/root-stack";
 import { useAuthStore } from "@/store/auth-store";
 import { useCartStore } from "@/store/cart-store";
 import { getReadableNetworkError } from "@/api/network-error";
-import { spacing, typography } from "@/theme/tokens";
+import { colors, radius, shadows, spacing, typography } from "@/theme/tokens";
 
 type Props = NativeStackScreenProps<RootStackParamList, "Checkout">;
-
-const PAY = {
-  navy: "#1A2B48",
-  orange: "#FF6B00",
-  orangeDark: "#E55A00",
-  orangeSoft: "#FFF4EB",
-  orangeBorder: "rgba(255, 107, 0, 0.45)",
-  white: "#FFFFFF",
-  canvas: "#F5F7FB",
-  textMuted: "#6B7280",
-  textSecondary: "#4B5563",
-  border: "#E8ECF2",
-  shadow: "rgba(26, 43, 72, 0.08)",
-  success: "#16A34A",
-  successSoft: "#ECFDF3",
-  danger: "#DC2626",
-  dangerSoft: "#FEF2F2"
-} as const;
 
 const paymentMethods: Array<{ id: CheckoutPaymentMethod; label: string; subtitle: string }> = [
   { id: "card", label: "بطاقة بنكية", subtitle: "Visa / MasterCard" },
@@ -41,22 +22,7 @@ const paymentMethods: Array<{ id: CheckoutPaymentMethod; label: string; subtitle
   { id: "stc_pay", label: "STC Pay", subtitle: "المحفظة الرقمية" }
 ];
 
-const PAYMENT_LOGOS: Record<CheckoutPaymentMethod, ImageSourcePropType> = {
-  card: require("../../assets/images/visa.png"),
-  apple_pay: require("../../assets/images/Appl-pay.jpg"),
-  mada: require("../../assets/images/mada.png"),
-  stc_pay: require("../../assets/images/Stc-bank.png")
-};
-
-const PAYMENT_LOGO_SIZE: Record<CheckoutPaymentMethod, { width: number; height: number }> = {
-  card: { width: 46, height: 15 },
-  apple_pay: { width: 48, height: 20 },
-  mada: { width: 50, height: 22 },
-  stc_pay: { width: 54, height: 20 }
-};
-
-const fmtAmount = (value: number) =>
-  `${value.toLocaleString("ar-SA", { maximumFractionDigits: 2 })} رس`;
+const fmtSAR = (value: number) => `${value.toLocaleString("ar-SA", { maximumFractionDigits: 2 })} ر.س`;
 
 export const CheckoutScreen = ({ navigation }: Props) => {
   const accessToken = useAuthStore((s) => s.accessToken) ?? "";
@@ -64,8 +30,6 @@ export const CheckoutScreen = ({ navigation }: Props) => {
   const queryClient = useQueryClient();
 
   const { truckId, truckName, items, notes, subtotal, total, pickupTypeLabel, clearCart } = useCartStore();
-
-  const serviceFee = useMemo(() => Number(Math.max(0, total - subtotal).toFixed(2)), [subtotal, total]);
 
   const payload = useMemo(
     () => ({
@@ -114,35 +78,21 @@ export const CheckoutScreen = ({ navigation }: Props) => {
         queryClient.invalidateQueries({ queryKey: ["customer-order-notifications"] })
       ]);
 
-      const { subtotal: orderSubtotal, total: orderTotal } = useCartStore.getState();
-      const orderServiceFee = Number(Math.max(0, orderTotal - orderSubtotal).toFixed(2));
-
       clearCart();
       const successStatus: "pending" | "paid" = payment.paymentStatus === "paid" ? "paid" : "pending";
       navigation.replace("PaymentSuccess", {
         orderId: order.orderId,
         paymentStatus: successStatus,
-        paymentMethod: payment.paymentMethod,
-        subtotal: orderSubtotal,
-        serviceFee: orderServiceFee,
-        total: orderTotal
+        paymentMethod: payment.paymentMethod
       });
     }
   });
-
-  const handlePayPress = () => {
-    if (!accessToken) {
-      navigation.navigate("Auth", { initialMode: "login", redirectTo: "Checkout" });
-      return;
-    }
-    void createOrderMutation.mutateAsync();
-  };
 
   if (items.length === 0 || !truckId) {
     return (
       <AppContainer edges={["top"]}>
         <View style={styles.emptyWrap}>
-          <CheckoutPageHeader title="الدفع" onBack={() => navigation.goBack()} />
+          <PageHeader title="الدفع" subtitle="لا يوجد طلب للدفع" />
           <EmptyState
             title="لا يوجد عناصر للدفع"
             description="أضف أصنافك أولاً من المنيو ثم ارجع لإتمام الطلب."
@@ -156,38 +106,37 @@ export const CheckoutScreen = ({ navigation }: Props) => {
     );
   }
 
-  const payDisabled = createOrderMutation.isPending || !method;
+  const itemCount = items.reduce((sum, item) => sum + item.quantity, 0);
 
   return (
     <AppContainer edges={["top"]}>
       <ScrollView style={styles.flex} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <CheckoutPageHeader title="الدفع" onBack={() => navigation.goBack()} />
+        <PageHeader title="الدفع" subtitle="راجع ملخص طلبك ثم اختر وسيلة الدفع" />
 
         <View style={styles.summaryCard}>
-          <View style={styles.summaryTopRow}>
+          <View style={styles.summaryHead}>
+            <Text style={styles.sectionTitle}>ملخص الطلب</Text>
             <View style={styles.pickupBadge}>
-              <Ionicons name="storefront-outline" size={12} color={PAY.orange} />
+              <Ionicons name="storefront-outline" size={12} color={colors.primaryDark} />
               <Text style={styles.pickupBadgeText}>{pickupTypeLabel}</Text>
             </View>
-            <Text style={styles.summaryTitle}>ملخص الطلب</Text>
           </View>
 
-          <Text style={styles.truckName} numberOfLines={1}>
-            {truckName}
-          </Text>
+          <View style={styles.truckRow}>
+            <View style={styles.truckDot} />
+            <Text style={styles.truckName} numberOfLines={1}>{truckName}</Text>
+            <Text style={styles.itemsCount}>{itemCount.toLocaleString("ar-SA")} أصناف</Text>
+          </View>
 
           <View style={styles.divider} />
 
           <View style={styles.itemsList}>
             {items.map((item) => (
               <View key={item.menuItemId} style={styles.itemRow}>
-                <Text style={styles.itemValue}>{fmtAmount(item.price * item.quantity)}</Text>
                 <Text style={styles.itemLabel} numberOfLines={1}>
-                  {item.name}
-                  {item.quantity > 1 ? (
-                    <Text style={styles.itemQty}> × {item.quantity.toLocaleString("ar-SA")}</Text>
-                  ) : null}
+                  {item.name} <Text style={styles.itemQty}>× {item.quantity.toLocaleString("ar-SA")}</Text>
                 </Text>
+                <Text style={styles.itemValue}>{fmtSAR(item.price * item.quantity)}</Text>
               </View>
             ))}
           </View>
@@ -195,75 +144,66 @@ export const CheckoutScreen = ({ navigation }: Props) => {
           <View style={styles.divider} />
 
           <View style={styles.itemRow}>
-            <Text style={styles.subValue}>{fmtAmount(subtotal)}</Text>
             <Text style={styles.subLabel}>المجموع الفرعي</Text>
-          </View>
-          <View style={styles.itemRow}>
-            <Text style={styles.subValue}>{fmtAmount(serviceFee)}</Text>
-            <Text style={styles.subLabel}>رسوم الخدمة</Text>
+            <Text style={styles.subValue}>{fmtSAR(subtotal)}</Text>
           </View>
 
           <View style={styles.grandTotalRow}>
-            <Text style={styles.totalValue}>{fmtAmount(total)}</Text>
-            <Text style={styles.totalLabel}>الإجمالي</Text>
+            <Text style={styles.totalLabel}>الإجمالي النهائي</Text>
+            <Text style={styles.totalValue}>{fmtSAR(total)}</Text>
           </View>
         </View>
 
-        <Text style={styles.sectionTitle}>طريقة الدفع</Text>
-
-        <View style={styles.methods}>
-          {paymentMethods.map((paymentMethod) => (
-            <PaymentMethodOption
-              key={paymentMethod.id}
-              id={paymentMethod.id}
-              label={paymentMethod.label}
-              subtitle={paymentMethod.subtitle}
-              selected={method === paymentMethod.id}
-              onPress={() => setMethod(paymentMethod.id)}
-            />
-          ))}
-        </View>
-
-        <View style={styles.securityCard}>
-          <View style={styles.securityTextWrap}>
-            <Text style={styles.securityTitle}>دفع آمن 100%</Text>
-            <Text style={styles.securitySubtitle}>جميع عمليات الدفع مشفرة وآمنة</Text>
+        <View style={styles.methodsCard}>
+          <View style={styles.methodsHead}>
+            <Text style={styles.sectionTitle}>طريقة الدفع</Text>
+            <Text style={styles.methodsHint}>اختر وسيلة واحدة</Text>
           </View>
-          <Ionicons name="shield-checkmark" size={22} color={PAY.success} />
+          <View style={styles.methods}>
+            {paymentMethods.map((paymentMethod) => (
+              <PaymentMethodCard
+                key={paymentMethod.id}
+                id={paymentMethod.id}
+                label={paymentMethod.label}
+                subtitle={paymentMethod.subtitle}
+                selected={method === paymentMethod.id}
+                onPress={() => setMethod(paymentMethod.id)}
+              />
+            ))}
+          </View>
         </View>
 
         {createOrderMutation.isError ? (
           <View style={styles.errorBox}>
-            <Ionicons name="alert-circle-outline" size={16} color={PAY.danger} />
+            <Ionicons name="alert-circle-outline" size={16} color={colors.danger} />
             <Text style={styles.errorText}>{getReadableNetworkError(createOrderMutation.error)}</Text>
           </View>
         ) : null}
 
-        <Pressable
-          onPress={handlePayPress}
-          disabled={payDisabled}
-          style={({ pressed }) => [styles.payPressable, pressed && !payDisabled && styles.payPressed]}
-        >
-          <LinearGradient
-            colors={payDisabled ? ["#D1D5DB", "#9CA3AF"] : ["#FF8533", PAY.orange, PAY.orangeDark]}
-            start={{ x: 0, y: 0.5 }}
-            end={{ x: 1, y: 0.5 }}
-            style={styles.payGradient}
-          >
-            {createOrderMutation.isPending ? (
-              <ActivityIndicator color={PAY.white} />
-            ) : (
-              <View style={styles.payInner}>
-                <Ionicons name="lock-closed" size={16} color={PAY.white} />
-                <Text style={styles.payLabel}>{`ادفع الآن ${fmtAmount(total)}`}</Text>
-              </View>
-            )}
-          </LinearGradient>
-        </Pressable>
-
-        <View style={styles.disclaimerRow}>
-          <Text style={styles.disclaimerText}>لن يتم خصم المبلغ إلا بعد تأكيد الطلب</Text>
-          <Ionicons name="shield-checkmark-outline" size={13} color={PAY.textMuted} />
+        <View style={styles.ctaCard}>
+          <View style={styles.ctaTotals}>
+            <Text style={styles.ctaTotalLabel}>المبلغ المستحق</Text>
+            <Text style={styles.ctaTotalValue}>{fmtSAR(total)}</Text>
+          </View>
+          <AppButton
+            label={createOrderMutation.isPending ? "جاري إتمام الدفع..." : "ادفع الآن"}
+            onPress={() => {
+              if (!accessToken) {
+                navigation.navigate("Auth", { initialMode: "login", redirectTo: "Checkout" });
+                return;
+              }
+              void createOrderMutation.mutateAsync();
+            }}
+            fullWidth
+            disabled={createOrderMutation.isPending || !method}
+            loading={createOrderMutation.isPending}
+            variant="primary"
+            size="lg"
+          />
+          <View style={styles.secureRow}>
+            <Ionicons name="shield-checkmark-outline" size={14} color={colors.success} />
+            <Text style={styles.secureText}>دفع آمن ومشفّر</Text>
+          </View>
         </View>
       </ScrollView>
     </AppContainer>
@@ -271,178 +211,44 @@ export const CheckoutScreen = ({ navigation }: Props) => {
 };
 
 // ============================================================
-// Local UI components
+// Page Header
 // ============================================================
 
-const CheckoutPageHeader = ({ title, onBack }: { title: string; onBack: () => void }) => (
+const PageHeader = ({ title, subtitle }: { title: string; subtitle?: string }) => (
   <View style={pageHeader.wrap}>
-    <Pressable onPress={onBack} style={({ pressed }) => [pageHeader.backBtn, pressed && pageHeader.backBtnPressed]} hitSlop={8}>
-      <Ionicons name="chevron-back" size={20} color={PAY.navy} />
-    </Pressable>
-    <View style={pageHeader.titleRow}>
+    <View style={pageHeader.bar} />
+    <View style={pageHeader.body}>
       <Text style={pageHeader.title}>{title}</Text>
-      <View style={pageHeader.iconWrap}>
-        <Ionicons name="bus-outline" size={16} color={PAY.orange} />
-      </View>
+      {subtitle ? <Text style={pageHeader.subtitle}>{subtitle}</Text> : null}
     </View>
-    <View style={pageHeader.spacer} />
   </View>
 );
 
-const PaymentMethodOption = ({
-  id,
-  label,
-  subtitle,
-  selected,
-  onPress
-}: {
-  id: CheckoutPaymentMethod;
-  label: string;
-  subtitle: string;
-  selected: boolean;
-  onPress: () => void;
-}) => {
-  const logoSize = PAYMENT_LOGO_SIZE[id];
-
-  return (
-    <Pressable
-      onPress={onPress}
-      style={({ pressed }) => [
-        methodStyles.card,
-        selected && methodStyles.cardSelected,
-        pressed && methodStyles.cardPressed
-      ]}
-    >
-      <View style={[methodStyles.radio, selected && methodStyles.radioSelected]}>
-        {selected ? <View style={methodStyles.radioDot} /> : null}
-      </View>
-
-      <View style={methodStyles.meta}>
-        <Text style={methodStyles.label}>{label}</Text>
-        <Text style={methodStyles.subtitle}>{subtitle}</Text>
-      </View>
-
-      <View style={methodStyles.logoBox}>
-        <Image source={PAYMENT_LOGOS[id]} style={[methodStyles.logoImage, logoSize]} resizeMode="contain" />
-      </View>
-    </Pressable>
-  );
-};
-
 const pageHeader = StyleSheet.create({
   wrap: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: spacing.md
-  },
-  backBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
-    backgroundColor: PAY.white,
-    borderWidth: 1,
-    borderColor: PAY.border,
-    alignItems: "center",
-    justifyContent: "center"
-  },
-  backBtnPressed: {
-    opacity: 0.85
-  },
-  titleRow: {
-    flex: 1,
     flexDirection: "row-reverse",
     alignItems: "center",
-    justifyContent: "center",
-    gap: 8
-  },
-  iconWrap: {
-    width: 30,
-    height: 30,
-    borderRadius: 10,
-    backgroundColor: PAY.orangeSoft,
-    alignItems: "center",
-    justifyContent: "center"
-  },
-  title: {
-    color: PAY.navy,
-    fontSize: typography.h1,
-    fontWeight: "800",
-    textAlign: "center"
-  },
-  spacer: {
-    width: 40
-  }
-});
-
-const methodStyles = StyleSheet.create({
-  card: {
-    flexDirection: "row",
-    alignItems: "center",
     gap: spacing.sm,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: PAY.border,
-    backgroundColor: PAY.white,
-    paddingHorizontal: spacing.md,
-    paddingVertical: 14
+    marginBottom: spacing.md
   },
-  cardSelected: {
-    borderColor: PAY.orange,
-    backgroundColor: PAY.orangeSoft
+  bar: {
+    width: 4,
+    height: 28,
+    borderRadius: 2,
+    backgroundColor: colors.primary
   },
-  cardPressed: {
-    opacity: 0.96
-  },
-  radio: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    borderWidth: 2,
-    borderColor: "#CBD5E1",
-    alignItems: "center",
-    justifyContent: "center"
-  },
-  radioSelected: {
-    borderColor: PAY.orange
-  },
-  radioDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: PAY.orange
-  },
-  meta: {
-    flex: 1,
-    alignItems: "flex-end"
-  },
-  label: {
-    color: PAY.navy,
-    fontSize: typography.bodySm,
+  body: { flex: 1, minWidth: 0 },
+  title: {
+    color: colors.text,
+    fontSize: typography.h1,
     fontWeight: "800",
     textAlign: "right"
   },
   subtitle: {
     marginTop: 2,
-    color: PAY.textMuted,
-    fontSize: typography.caption,
+    color: colors.textMuted,
+    fontSize: typography.bodySm,
     textAlign: "right"
-  },
-  logoBox: {
-    width: 64,
-    height: 44,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: PAY.border,
-    backgroundColor: PAY.white,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 6,
-    paddingVertical: 6
-  },
-  logoImage: {
-    maxWidth: "100%",
-    maxHeight: "100%"
   }
 });
 
@@ -451,7 +257,7 @@ const methodStyles = StyleSheet.create({
 // ============================================================
 
 const styles = StyleSheet.create({
-  flex: { flex: 1, backgroundColor: PAY.canvas },
+  flex: { flex: 1 },
   emptyWrap: {
     flex: 1,
     paddingHorizontal: spacing.lg,
@@ -462,27 +268,27 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.md,
     paddingBottom: 120,
-    gap: spacing.md
+    gap: spacing.sm
   },
 
+  // Summary card
   summaryCard: {
-    borderRadius: 16,
-    backgroundColor: PAY.white,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
     padding: spacing.md,
     gap: spacing.sm,
-    shadowColor: PAY.shadow,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 1,
-    shadowRadius: 12,
-    elevation: 3
+    ...shadows.soft
   },
-  summaryTopRow: {
-    flexDirection: "row",
+  summaryHead: {
+    flexDirection: "row-reverse",
     alignItems: "center",
-    justifyContent: "space-between"
+    justifyContent: "space-between",
+    gap: spacing.sm
   },
-  summaryTitle: {
-    color: PAY.navy,
+  sectionTitle: {
+    color: colors.text,
     fontWeight: "800",
     fontSize: typography.h3,
     textAlign: "right"
@@ -491,171 +297,178 @@ const styles = StyleSheet.create({
     flexDirection: "row-reverse",
     alignItems: "center",
     gap: 4,
-    borderRadius: 999,
-    backgroundColor: PAY.orangeSoft,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    borderColor: colors.borderStrong,
+    backgroundColor: colors.primarySoft,
     paddingHorizontal: 10,
-    paddingVertical: 5
+    paddingVertical: 4
   },
   pickupBadgeText: {
-    color: PAY.orange,
+    color: colors.primaryDark,
     fontSize: typography.micro,
     fontWeight: "800"
   },
+  truckRow: {
+    flexDirection: "row-reverse",
+    alignItems: "center",
+    gap: 8
+  },
+  truckDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: colors.primary
+  },
   truckName: {
-    color: PAY.navy,
+    flex: 1,
+    color: colors.text,
     fontWeight: "700",
     fontSize: typography.body,
     textAlign: "right"
   },
+  itemsCount: {
+    color: colors.textMuted,
+    fontSize: typography.caption,
+    fontWeight: "700"
+  },
+
   divider: {
     height: 1,
-    backgroundColor: PAY.border
+    backgroundColor: colors.border
   },
+
   itemsList: {
     gap: spacing.xs
   },
   itemRow: {
-    flexDirection: "row",
+    flexDirection: "row-reverse",
     alignItems: "center",
     justifyContent: "space-between",
     gap: spacing.sm
   },
   itemLabel: {
     flex: 1,
-    color: PAY.textSecondary,
+    color: colors.textSecondary,
     fontSize: typography.bodySm,
-    textAlign: "right",
-    fontWeight: "600"
+    textAlign: "right"
   },
   itemQty: {
-    color: PAY.textMuted,
+    color: colors.textMuted,
     fontWeight: "700"
   },
   itemValue: {
-    color: PAY.navy,
+    color: colors.text,
     fontWeight: "700",
     fontSize: typography.bodySm
   },
   subLabel: {
-    color: PAY.textSecondary,
-    fontSize: typography.bodySm,
-    fontWeight: "600"
+    color: colors.textSecondary,
+    fontSize: typography.bodySm
   },
   subValue: {
-    color: PAY.navy,
+    color: colors.text,
     fontSize: typography.bodySm,
     fontWeight: "700"
   },
+
   grandTotalRow: {
-    flexDirection: "row",
+    flexDirection: "row-reverse",
     alignItems: "center",
     justifyContent: "space-between",
-    marginTop: 2
+    borderRadius: radius.md,
+    backgroundColor: colors.surfaceElevated,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.sm,
+    marginTop: 4
   },
   totalLabel: {
-    color: PAY.navy,
+    color: colors.text,
     fontWeight: "800",
     fontSize: typography.body
   },
   totalValue: {
-    color: PAY.orange,
+    color: colors.primary,
     fontWeight: "900",
-    fontSize: typography.h3
+    fontSize: typography.h2
   },
 
-  sectionTitle: {
-    color: PAY.navy,
-    fontWeight: "800",
-    fontSize: typography.h3,
-    textAlign: "right",
-    marginTop: 2
+  // Methods
+  methodsCard: {
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    padding: spacing.md,
+    gap: spacing.sm,
+    ...shadows.soft
   },
-  methods: {
-    gap: spacing.sm
-  },
-
-  securityCard: {
+  methodsHead: {
     flexDirection: "row-reverse",
     alignItems: "center",
-    gap: spacing.sm,
-    borderRadius: 14,
-    backgroundColor: PAY.successSoft,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm
+    justifyContent: "space-between"
   },
-  securityTextWrap: {
-    flex: 1,
-    alignItems: "flex-end"
-  },
-  securityTitle: {
-    color: PAY.success,
-    fontWeight: "800",
-    fontSize: typography.bodySm,
-    textAlign: "right"
-  },
-  securitySubtitle: {
-    marginTop: 2,
-    color: PAY.textMuted,
+  methodsHint: {
+    color: colors.textMuted,
     fontSize: typography.caption,
-    textAlign: "right"
+    fontWeight: "600"
   },
+  methods: { gap: spacing.xs },
 
+  // Error
   errorBox: {
     flexDirection: "row-reverse",
     alignItems: "center",
     gap: 6,
-    borderRadius: 12,
+    borderRadius: radius.md,
     borderWidth: 1,
-    borderColor: PAY.danger,
-    backgroundColor: PAY.dangerSoft,
+    borderColor: colors.danger,
+    backgroundColor: colors.dangerSoft,
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.xs
   },
   errorText: {
     flex: 1,
-    color: PAY.danger,
+    color: colors.danger,
     fontSize: typography.bodySm,
     fontWeight: "700",
     textAlign: "right"
   },
 
-  payPressable: {
-    borderRadius: 16,
-    overflow: "hidden",
-    marginTop: spacing.xs
+  // CTA
+  ctaCard: {
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    padding: spacing.md,
+    gap: spacing.sm,
+    ...shadows.soft
   },
-  payPressed: {
-    opacity: 0.94
+  ctaTotals: {
+    flexDirection: "row-reverse",
+    alignItems: "baseline",
+    justifyContent: "space-between"
   },
-  payGradient: {
-    minHeight: 54,
-    borderRadius: 16,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: spacing.lg
+  ctaTotalLabel: {
+    color: colors.textSecondary,
+    fontSize: typography.bodySm,
+    fontWeight: "700"
   },
-  payInner: {
+  ctaTotalValue: {
+    color: colors.primary,
+    fontWeight: "900",
+    fontSize: typography.h2
+  },
+  secureRow: {
     flexDirection: "row-reverse",
     alignItems: "center",
-    gap: 8
-  },
-  payLabel: {
-    color: PAY.white,
-    fontSize: typography.body,
-    fontWeight: "800"
-  },
-
-  disclaimerRow: {
-    flexDirection: "row-reverse",
-    alignItems: "center",
     justifyContent: "center",
-    gap: 5,
-    marginTop: -4
+    gap: 6
   },
-  disclaimerText: {
-    color: PAY.textMuted,
+  secureText: {
+    color: colors.textMuted,
     fontSize: typography.micro,
-    fontWeight: "600",
-    textAlign: "center"
+    fontWeight: "600"
   }
 });
