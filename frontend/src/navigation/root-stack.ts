@@ -9,6 +9,11 @@ export type RootStackParamList = {
         redirectTo?: "Checkout";
       }
     | undefined;
+  VerifyEmail: {
+    email: string;
+    password: string;
+    redirectTo?: "Checkout";
+  };
   OwnerDashboard: undefined;
   OwnerOnboarding: { flow?: "register" | "update" } | undefined;
   AdminPanel: undefined;
@@ -25,5 +30,20 @@ export type RootStackParamList = {
     orderId: number;
     paymentStatus: "pending" | "paid";
     paymentMethod: "card" | "apple_pay" | "mada" | "stc_pay";
+    subtotal: number;
+    serviceFee: number;
+    total: number;
+  };
+  CustomerAccountEdit: undefined;
+  AdminCreateAccount: undefined;
+  ComingSoon: {
+    title: string;
+    message: string;
   };
 };
+
+declare global {
+  namespace ReactNavigation {
+    interface RootParamList extends RootStackParamList {}
+  }
+}

@@ -62,8 +62,18 @@ export const TruckDetailsScreen = ({ route, navigation }: Props) => {
 
   const ratingNum = Number(data.avg_rating);
   const hasRatings = (data.rating_count ?? 0) > 0 && Number.isFinite(ratingNum) && ratingNum > 0;
+  const isTruckClosed = data.operational_status === "closed";
+
+  const showClosedAlert = () => {
+    Alert.alert("تنبيه", "الترك مغلق حالياً، لا يمكن الطلب الآن");
+  };
 
   const handleAdd = (item: (typeof data.menuItems)[number]) => {
+    if (isTruckClosed) {
+      showClosedAlert();
+      return;
+    }
+
     if (!canAddFromTruck(data.id)) {
       Alert.alert("تنبيه السلة", "يمكنك الطلب من ترك واحد فقط في كل مرة", [
         { text: "إلغاء", style: "cancel" },
@@ -145,8 +155,18 @@ export const TruckDetailsScreen = ({ route, navigation }: Props) => {
             <View style={styles.menuList}>
               {visibleMenuItems.map((item) => {
                 const quantity = quantityById.get(item.id) ?? 0;
+                const onIncrement = () => {
+                  if (isTruckClosed) {
+                    showClosedAlert();
+                    return;
+                  }
+                  incrementItem(item.id);
+                };
+                const onDecrement = () => decrementItem(item.id);
+                const onAdd = () => handleAdd(item);
+
                 return (
-                  <View key={item.id} style={styles.menuItemCard}>
+                  <View key={item.id} style={[styles.menuItemCard, isTruckClosed && styles.menuItemCardClosed]}>
                     {resolveMediaUrl(item.image_url) ? (
                       <Image source={{ uri: resolveMediaUrl(item.image_url) ?? "" }} style={styles.menuItemImage} resizeMode="cover" />
                     ) : null}
@@ -158,20 +178,23 @@ export const TruckDetailsScreen = ({ route, navigation }: Props) => {
                     </View>
                     {item.description ? <Text style={styles.menuDesc}>{item.description}</Text> : null}
 
-                    {quantity > 0 ? (
-                      <View style={styles.stepperRow}>
-                        <Pressable style={styles.stepperBtn} onPress={() => incrementItem(item.id)}>
-                          <Ionicons name="add" size={18} color={colors.primaryDark} />
-                        </Pressable>
-                        <Text style={styles.stepperQty}>{quantity.toLocaleString("ar-SA")}</Text>
-                        <Pressable style={styles.stepperBtn} onPress={() => decrementItem(item.id)}>
-                          <Ionicons name="remove" size={18} color={colors.primaryDark} />
-                        </Pressable>
-                        <AppButton label="إضافة" onPress={() => handleAdd(item)} variant="ghost" size="sm" style={styles.addMoreBtn} />
-                      </View>
-                    ) : (
-                      <AppButton label="إضافة" icon="add" onPress={() => handleAdd(item)} variant="primary" size="sm" style={styles.addBtn} />
-                    )}
+                    <View style={styles.stepperRow}>
+                      <Pressable
+                        style={[styles.stepperBtn, isTruckClosed && styles.stepperBtnDisabled]}
+                        onPress={quantity > 0 ? onIncrement : onAdd}
+                        disabled={isTruckClosed}
+                      >
+                        <Ionicons name="add" size={18} color={isTruckClosed ? colors.textMuted : colors.primaryDark} />
+                      </Pressable>
+                      {quantity > 0 ? (
+                        <>
+                          <Text style={styles.stepperQty}>{quantity.toLocaleString("ar-SA")}</Text>
+                          <Pressable style={styles.stepperBtn} onPress={onDecrement}>
+                            <Ionicons name="remove" size={18} color={colors.primaryDark} />
+                          </Pressable>
+                        </>
+                      ) : null}
+                    </View>
                   </View>
                 );
               })}
@@ -307,6 +330,9 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface2,
     padding: spacing.sm
   },
+  menuItemCardClosed: {
+    opacity: 0.55
+  },
   menuItemImage: {
     width: "100%",
     height: 140,
@@ -336,9 +362,6 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     fontSize: typography.bodySm
   },
-  addBtn: {
-    marginTop: spacing.sm
-  },
   stepperRow: {
     marginTop: spacing.sm,
     flexDirection: "row",
@@ -355,15 +378,15 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center"
   },
+  stepperBtnDisabled: {
+    backgroundColor: colors.surface2
+  },
   stepperQty: {
     minWidth: 28,
     textAlign: "center",
     color: colors.text,
     fontWeight: "800",
     fontSize: typography.bodySm
-  },
-  addMoreBtn: {
-    marginStart: "auto"
   },
   stickyCartWrap: {
     position: "absolute",

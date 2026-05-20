@@ -3,22 +3,23 @@ import { StyleSheet, Text, View } from "react-native";
 
 import { colors, iconSize, radius, spacing, typography } from "@/theme/tokens";
 
+type OrderStatus = "pending" | "preparing" | "ready" | "picked_up" | "cancelled";
 type StepState = "done" | "active" | "pending";
 
 type CustomerOrderTimelineProps = {
-  status: "pending" | "preparing" | "ready" | "picked_up" | "cancelled";
+  status: OrderStatus;
 };
 
-const steps = [
-  { key: "pending", label: "تم استلام الطلب", icon: "receipt-outline" },
-  { key: "preparing", label: "قيد التحضير", icon: "flame-outline" },
-  { key: "ready", label: "جاهز للاستلام", icon: "checkmark-circle-outline" },
-  { key: "picked_up", label: "تم التسليم", icon: "bag-check-outline" }
+const STEPS = [
+  { key: "pending", label: "تم استلام الطلب", icon: "bag-outline" as const },
+  { key: "preparing", label: "قيد التحضير", icon: "restaurant-outline" as const },
+  { key: "ready", label: "جاهز للاستلام", icon: "bag-check-outline" as const },
+  { key: "picked_up", label: "تم التسليم", icon: "checkmark" as const }
 ] as const;
 
-const statusIndex = (status: CustomerOrderTimelineProps["status"]) => {
+const statusIndex = (status: OrderStatus) => {
   if (status === "cancelled") return -1;
-  return steps.findIndex((step) => step.key === status);
+  return STEPS.findIndex((step) => step.key === status);
 };
 
 const stateFor = (currentIndex: number, index: number): StepState => {
@@ -26,6 +27,12 @@ const stateFor = (currentIndex: number, index: number): StepState => {
   if (index < currentIndex) return "done";
   if (index === currentIndex) return "active";
   return "pending";
+};
+
+const activeTone = (status: OrderStatus, index: number) => {
+  if (status === "ready" && index === 2) return "green" as const;
+  if (status === "picked_up") return "green" as const;
+  return "orange" as const;
 };
 
 export const CustomerOrderTimeline = ({ status }: CustomerOrderTimelineProps) => {
@@ -39,98 +46,138 @@ export const CustomerOrderTimeline = ({ status }: CustomerOrderTimelineProps) =>
   }
 
   const currentIndex = statusIndex(status);
+  const effectiveIndex = status === "picked_up" ? STEPS.length : currentIndex;
+
   return (
     <View style={styles.wrap}>
-      {steps.map((step, index) => {
-        const stepState = stateFor(currentIndex, index);
-        const isLast = index === steps.length - 1;
-        const iconColor =
-          stepState === "done" ? colors.success : stepState === "active" ? colors.primaryDark : colors.textMuted;
-        const textColor =
-          stepState === "done" ? colors.text : stepState === "active" ? colors.primaryDark : colors.textMuted;
-        return (
-          <View key={step.key} style={styles.row}>
-            <View style={styles.nodeRow}>
-              <View
-                style={[
-                  styles.node,
-                  stepState === "active" && styles.nodeActive,
-                  stepState === "done" && styles.nodeDone,
-                  stepState === "pending" && styles.nodePending
-                ]}
-              >
-                <Ionicons name={step.icon} size={iconSize.sm} color={iconColor} />
-              </View>
-              {!isLast ? (
-                <View style={styles.track}>
-                  <View
-                    style={[
-                      styles.trackFill,
-                      (stepState === "done" || (stepState === "active" && currentIndex > index)) && styles.trackFillOn
-                    ]}
-                  />
+      <View style={styles.trackRow}>
+        {STEPS.map((step, index) => {
+          const stepState = stateFor(effectiveIndex, index);
+          const isLast = index === STEPS.length - 1;
+          const tone = stepState === "active" ? activeTone(status, index) : stepState === "done" ? "green" : "muted";
+          const connectorOn = stepState === "done" || (stepState === "active" && currentIndex > index);
+
+          return (
+            <View key={step.key} style={styles.stepCol}>
+              <View style={styles.nodeRow}>
+                <View
+                  style={[
+                    styles.node,
+                    tone === "green" && styles.nodeGreen,
+                    tone === "orange" && styles.nodeOrange,
+                    tone === "muted" && styles.nodeMuted
+                  ]}
+                >
+                  {stepState === "done" ? (
+                    <Ionicons name="checkmark" size={14} color={colors.onPrimary} />
+                  ) : (
+                    <Ionicons
+                      name={step.icon}
+                      size={14}
+                      color={tone === "muted" ? colors.textMuted : colors.onPrimary}
+                    />
+                  )}
                 </View>
-              ) : null}
+                {!isLast ? (
+                  <View style={styles.connector}>
+                    <View style={[styles.connectorFill, connectorOn && (tone === "green" ? styles.connectorGreen : styles.connectorOrange)]} />
+                  </View>
+                ) : null}
+              </View>
+              <Text
+                style={[
+                  styles.label,
+                  stepState === "active" && tone === "orange" && styles.labelActiveOrange,
+                  (stepState === "active" && tone === "green") || stepState === "done" ? styles.labelActiveGreen : null,
+                  stepState === "pending" && styles.labelMuted
+                ]}
+                numberOfLines={2}
+              >
+                {step.label}
+              </Text>
             </View>
-            <Text style={[styles.label, { color: textColor }]}>{step.label}</Text>
-          </View>
-        );
-      })}
+          );
+        })}
+      </View>
     </View>
   );
 };
 
 const styles = StyleSheet.create({
   wrap: {
-    gap: spacing.xs
+    width: "100%"
   },
-  row: {
-    gap: spacing.xs
+  trackRow: {
+    flexDirection: "row-reverse",
+    alignItems: "flex-start"
+  },
+  stepCol: {
+    flex: 1,
+    alignItems: "center",
+    minWidth: 0
   },
   nodeRow: {
+    width: "100%",
     flexDirection: "row-reverse",
-    alignItems: "center",
-    gap: spacing.xs
+    alignItems: "center"
   },
   node: {
-    width: 30,
-    height: 30,
-    borderRadius: radius.pill,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     alignItems: "center",
     justifyContent: "center",
-    borderWidth: 1
+    borderWidth: 1.5
   },
-  nodeActive: {
-    borderColor: colors.borderStrong,
-    backgroundColor: colors.primaryMuted
+  nodeOrange: {
+    borderColor: colors.primary,
+    backgroundColor: colors.primary
   },
-  nodeDone: {
-    borderColor: "rgba(15, 157, 90, 0.35)",
-    backgroundColor: colors.successMuted
+  nodeGreen: {
+    borderColor: colors.success,
+    backgroundColor: colors.success
   },
-  nodePending: {
+  nodeMuted: {
     borderColor: colors.border,
     backgroundColor: colors.surface2
   },
-  track: {
+  connector: {
     flex: 1,
-    height: 4,
+    height: 2,
+    marginHorizontal: 2,
     borderRadius: radius.pill,
     backgroundColor: colors.bgDeep,
     overflow: "hidden"
   },
-  trackFill: {
-    width: "100%",
+  connectorFill: {
+    flex: 1,
     height: "100%",
     backgroundColor: colors.bgDeep
   },
-  trackFillOn: {
+  connectorOrange: {
     backgroundColor: colors.primary
   },
+  connectorGreen: {
+    backgroundColor: colors.success
+  },
   label: {
-    fontSize: typography.caption,
+    marginTop: 6,
+    fontSize: 10,
     fontWeight: "700",
-    textAlign: "right"
+    textAlign: "center",
+    color: colors.text
+  },
+  labelActiveOrange: {
+    color: colors.primaryDark,
+    fontWeight: "800"
+  },
+  labelActiveGreen: {
+    color: colors.success,
+    fontWeight: "800"
+  },
+  labelMuted: {
+    color: colors.textMuted,
+    fontWeight: "600"
   },
   cancelledWrap: {
     flexDirection: "row-reverse",
