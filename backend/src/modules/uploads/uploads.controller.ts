@@ -18,13 +18,16 @@ export const uploadSingle = async (req: Request, res: Response) => {
     throw new AppError("UPLOAD_FILE_MISSING");
   }
   const file = req.file;
+  const mimeType = (file.mimetype || "").toLowerCase();
+  const isPdf = mimeType === "application/pdf" || file.originalname.toLowerCase().endsWith(".pdf");
+  const resourceType: "raw" | "auto" = isPdf ? "raw" : "auto";
 
   const uploaded = await new Promise<{ secure_url: string; public_id: string }>((resolve, reject) => {
     const stream = cloudinary.uploader.upload_stream(
       {
         folder: "foodtruck-platform",
-        // Lets Cloudinary classify PDF/other non-images as raw so secure_url stays a real file URL.
-        resource_type: "auto"
+        // Keep truck images untouched, but force license PDFs to raw delivery URLs.
+        resource_type: resourceType
       },
       (error, result) => {
         if (error || !result) {
