@@ -180,13 +180,16 @@ const getLatestOwnerTruckDraft = async (ownerUserId: number) => {
       "ft.working_hours",
       "ft.contact_phone",
       "ft.approval_status",
+      "ft.category_id",
       "tl.city",
       "tl.neighborhood",
       "tl.latitude",
       "tl.longitude",
       "ml.license_number",
       "ml.document_url",
+      "ml.document_url as license_file_url",
       "ml.expires_at",
+      "ml.review_note as rejection_reason",
       "c.name as category_name"
     )
     .where({ "ft.owner_user_id": ownerUserId })
