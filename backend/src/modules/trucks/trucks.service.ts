@@ -1,6 +1,7 @@
 import { AppError } from "../../core/errors";
 import type { AuthUser } from "../../core/types/auth";
 import { ROLE_CODES } from "../shared/roles";
+import { deriveCloudinaryLicenseFields, effectiveLicenseFileUrl, finalizePdfRawHttpsUrlIfNeeded } from "../shared/cloudinary-license-delivery";
 import { TRUCK_APPROVAL_STATUS } from "../shared/truck-status";
 import { trucksRepository, type AdminTruckListFilter } from "./trucks.repository";
 
@@ -79,7 +80,7 @@ const registerTruck = async (
     neighborhood: payload.location.neighborhood,
     city: payload.location.city,
     licenseNumber: payload.license.licenseNumber,
-    licenseDocumentUrl: payload.license.documentUrl,
+    licenseDocumentUrl: finalizePdfRawHttpsUrlIfNeeded(payload.license.documentUrl.trim()),
     licenseExpiresAt: payload.license.expiresAt
   };
 
@@ -162,7 +163,18 @@ const listPending = async (authUser: AuthUser) => {
   }
 
   const items = await trucksRepository.listPendingTrucks();
-  return { items };
+  const enriched = items.map((row) => {
+    const stored = row.document_url ?? null;
+    const derived = deriveCloudinaryLicenseFields(stored);
+    return {
+      ...row,
+      license_file_url: effectiveLicenseFileUrl(stored),
+      license_file_resource_type: derived.license_file_resource_type,
+      license_file_format: derived.license_file_format,
+      license_file_public_id: derived.license_file_public_id
+    };
+  });
+  return { items: enriched };
 };
 
 const getAdminStats = async (authUser: AuthUser) => {
