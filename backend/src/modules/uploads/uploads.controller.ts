@@ -22,7 +22,9 @@ export const uploadSingle = async (req: Request, res: Response) => {
   const uploaded = await new Promise<{ secure_url: string; public_id: string }>((resolve, reject) => {
     const stream = cloudinary.uploader.upload_stream(
       {
-        folder: "foodtruck-platform"
+        folder: "foodtruck-platform",
+        // Lets Cloudinary classify PDF/other non-images as raw so secure_url stays a real file URL.
+        resource_type: "auto"
       },
       (error, result) => {
         if (error || !result) {
