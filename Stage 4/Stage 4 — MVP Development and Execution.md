@@ -57,7 +57,7 @@ The team followed **Agile-style collaboration** during development by:
 
 ---
 
-### 🧪 Abu Nasser — QA Tester
+### 🧪 Nabel Nasser — QA Tester
 
 | Responsibility |
 |---|
